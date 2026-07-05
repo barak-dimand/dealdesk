@@ -8,7 +8,22 @@ import {
   formatDSCR,
 } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, TrendingUp } from "lucide-react";
-import type { DealOfferStructure } from "@/types";
+import type { DealOfferStructure, DealDataField } from "@/types";
+
+// Summary field_value is often stored as a raw number string (e.g. "1125000")
+// by the parse route. Format for display: percent-like keys get %, plain
+// counts/multipliers stay numeric, everything else is treated as dollars.
+function formatSummaryValue(field: DealDataField): string {
+  const raw = field.field_value;
+  if (raw && !/^-?\d+(\.\d+)?$/.test(raw.trim())) return raw; // already formatted
+  const num = field.field_value_numeric ?? (raw != null ? Number(raw) : null);
+  if (num == null || Number.isNaN(num)) return raw ?? "—";
+  const key = field.field_key.toLowerCase();
+  if (/(rate|ratio|percent|pct|vacancy)/.test(key)) return formatPercent(num);
+  if (/(multiplier|grm|count|units|year)/.test(key)) return num.toLocaleString("en-US");
+  // value_numeric for summary items is stored in dollars, not cents
+  return formatCentsFull(Math.round(num * 100));
+}
 
 function KeyMetricBar({
   label,
@@ -288,9 +303,7 @@ export function SummaryTab() {
           )}
 
           {summaryFields.map((field) => {
-            const val = field.field_value ?? (field.field_value_numeric != null
-              ? String(field.field_value_numeric)
-              : "—");
+            const val = formatSummaryValue(field);
             return (
               <KeyMetricBar
                 key={field.id}

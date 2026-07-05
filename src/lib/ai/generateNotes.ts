@@ -12,12 +12,16 @@ export async function generateDealNotesIfEmpty(
   supabase: AdminClient,
   dealId: string
 ): Promise<void> {
+  console.log(`[generateNotes] called for deal ${dealId}`);
   const { data: existing } = await supabase
     .from("deal_notes")
     .select("id, content")
     .eq("deal_id", dealId)
     .maybeSingle();
-  if (existing?.content && existing.content.trim() !== "") return;
+  if (existing?.content && existing.content.trim() !== "") {
+    console.log(`[generateNotes] deal ${dealId} already has notes — skipping`);
+    return;
+  }
 
   const [{ data: deal }, { data: units }, { data: fields }, { data: docs }] =
     await Promise.all([
@@ -26,9 +30,15 @@ export async function generateDealNotesIfEmpty(
       supabase.from("deal_data_fields").select("category, field_label, field_value, ai_note").eq("deal_id", dealId),
       supabase.from("deal_documents").select("parse_warnings").eq("deal_id", dealId).eq("status", "parsed"),
     ]);
-  if (!deal) return;
+  if (!deal) {
+    console.log(`[generateNotes] deal ${dealId} not found — aborting`);
+    return;
+  }
 
   const warnings = (docs ?? []).flatMap((d) => (d.parse_warnings as string[] | null) ?? []);
+  console.log(
+    `[generateNotes] context for "${deal.name}": ${units?.length ?? 0} units, ${fields?.length ?? 0} fields, ${warnings.length} warnings`
+  );
 
   const unitsSummary = (units ?? [])
     .map(
@@ -79,9 +89,17 @@ Respond with ONLY the HTML. No preamble, no code fences.`;
   let html = response.content[0].type === "text" ? response.content[0].text.trim() : "";
   // Strip code fences if the model added them anyway
   html = html.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "").trim();
-  if (!html.startsWith("<")) return;
+  if (!html.startsWith("<")) {
+    console.error(`[generateNotes] AI returned non-HTML output — aborting: ${html.slice(0, 120)}`);
+    return;
+  }
 
-  await supabase
+  const { error } = await supabase
     .from("deal_notes")
     .upsert({ deal_id: dealId, content: html }, { onConflict: "deal_id" });
+  if (error) {
+    console.error(`[generateNotes] upsert failed: ${error.message}`);
+  } else {
+    console.log(`[generateNotes] stored ${html.length} chars of notes for deal ${dealId}`);
+  }
 }

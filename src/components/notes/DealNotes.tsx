@@ -49,11 +49,28 @@ const SECTIONS = [
   "Negotiation notes",
 ];
 
+// Compare notes by text content only — tiptap normalizes HTML structure on
+// save, so string equality against the raw template never matches.
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+const TEMPLATE_TEXT = stripHtml(DEFAULT_NOTE_TEMPLATE);
+
+function isUserContent(html: string | null): html is string {
+  if (!html) return false;
+  const text = stripHtml(html);
+  return text !== "" && text !== TEMPLATE_TEXT;
+}
+
 export function DealNotes() {
-  const { activeDeal } = useDealStore();
+  const { activeDeal, centerTab, mobileTab } = useDealStore();
 
   const dealId = activeDeal?.id ?? null;
   const storageKey = dealId ? `dealdesk_notes_${dealId}` : null;
+  // DealView toggles tabs with display:none — this component never unmounts,
+  // so we must (re)load when the Notes tab actually becomes visible.
+  const notesVisible = centerTab === "notes" || mobileTab === "notes";
 
   // Refs so the (stable) tiptap onUpdate closure always sees the current deal
   const dealIdRef = useRef<string | null>(null);
@@ -94,11 +111,19 @@ export function DealNotes() {
     },
   });
 
-  // Load content when deal changes: local user edits win, then DB
-  // (which may hold AI-generated DD notes), then the blank template.
+  // Load content when the Notes tab becomes visible or the deal changes.
+  // Priority: real user edits in localStorage → DB (AI-generated DD notes)
+  // → blank template. "Real user edits" excludes empty docs and content that
+  // is textually identical to the default template.
+  const lastLoadedDeal = useRef<string | null>(null);
   useEffect(() => {
-    if (!editor || !dealId || !storageKey) return;
+    if (!editor || !dealId || !storageKey || !notesVisible) return;
     let cancelled = false;
+
+    if (lastLoadedDeal.current !== dealId) {
+      lastLoadedDeal.current = dealId;
+      editor.commands.setContent(DEFAULT_NOTE_TEMPLATE);
+    }
 
     let saved: string | null = null;
     try {
@@ -106,7 +131,7 @@ export function DealNotes() {
     } catch {
       saved = null;
     }
-    if (saved) {
+    if (isUserContent(saved)) {
       editor.commands.setContent(saved);
       return;
     }
@@ -115,16 +140,24 @@ export function DealNotes() {
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
-        editor.commands.setContent(data.note?.content || DEFAULT_NOTE_TEMPLATE);
+        console.log("[DealNotes] GET /notes returned:", {
+          hasNote: !!data.note,
+          contentLength: data.note?.content?.length ?? 0,
+        });
+        // Never clobber edits the user made since this fetch started
+        const pristine = !isUserContent(editor.getHTML());
+        if (data.note?.content && pristine) {
+          editor.commands.setContent(data.note.content);
+        }
       })
       .catch(() => {
-        if (!cancelled) editor.commands.setContent(DEFAULT_NOTE_TEMPLATE);
+        // editor already shows the template baseline
       });
 
     return () => {
       cancelled = true;
     };
-  }, [editor, dealId, storageKey]);
+  }, [editor, dealId, storageKey, notesVisible]);
 
   const scrollToSection = useCallback(
     (label: string) => {

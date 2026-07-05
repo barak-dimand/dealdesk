@@ -252,10 +252,14 @@ export async function POST(
       })
       .eq("id", dealId);
 
-    // Fire-and-forget: AI-generated DD notes (skips if deal_notes already has content)
-    generateDealNotesIfEmpty(supabase, dealId).catch((err) =>
-      console.error("Notes generation failed:", err)
-    );
+    // AI-generated DD notes (skips if deal_notes already has content).
+    // Awaited: fire-and-forget gets killed after the response returns on
+    // serverless (and often in dev). Adds ~3-5s to an already-long parse.
+    try {
+      await generateDealNotesIfEmpty(supabase, dealId);
+    } catch (err) {
+      console.error("Notes generation failed:", err);
+    }
 
     const parseConfidenceLabel = confidenceLabel(parsed.confidence);
     return NextResponse.json({

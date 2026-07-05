@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { useDealStore } from "@/store/dealStore";
 import { formatCentsFull } from "@/lib/utils";
 import { ChevronDown, ChevronUp, TrendingUp, AlertTriangle, ListChecks } from "lucide-react";
@@ -19,6 +20,34 @@ interface NextStep {
   label: string;
   onClick?: () => void;
   sublist?: string[];
+}
+
+const RISK_TRUNCATE_AT = 120;
+
+function RiskItem({ text }: { text: string }) {
+  if (text.length <= RISK_TRUNCATE_AT) {
+    return <li className="text-[12px] text-[#3a3833] leading-[1.5]">· {text}</li>;
+  }
+  const truncated = text.slice(0, RISK_TRUNCATE_AT).trimEnd() + "...";
+  return (
+    <li className="text-[12px] text-[#3a3833] leading-[1.5]">
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <span className="cursor-default">· {truncated}</span>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            side="bottom"
+            sideOffset={4}
+            className="bg-[#23211d] text-white text-[11.5px] px-2.5 py-1.5 rounded-[6px] shadow-md max-w-[320px] z-50 leading-[1.5]"
+          >
+            {text}
+            <Tooltip.Arrow className="fill-[#23211d]" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </li>
+  );
 }
 
 function Card({
@@ -248,13 +277,13 @@ export function DealIntelligenceBanner() {
             {risks.length === 0 ? (
               <p className="text-[12px] text-[#b3aea3] italic">No risk flags detected.</p>
             ) : (
-              <ul className="flex flex-col gap-1.5">
-                {risks.map((r, i) => (
-                  <li key={i} className="text-[12px] text-[#3a3833] leading-[1.5]">
-                    · {r}
-                  </li>
-                ))}
-              </ul>
+              <Tooltip.Provider delayDuration={300}>
+                <ul className="flex flex-col gap-1.5">
+                  {risks.map((r, i) => (
+                    <RiskItem key={i} text={r} />
+                  ))}
+                </ul>
+              </Tooltip.Provider>
             )}
           </Card>
 
