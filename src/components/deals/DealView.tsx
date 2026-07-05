@@ -144,6 +144,8 @@ export function DealView() {
                 (centerTab === "sheet" || mobileTab === "sheet") &&
                 centerTab !== "loi" &&
                 centerTab !== "rec" &&
+                centerTab !== "notes" &&
+                centerTab !== "files" &&
                 mobileTab !== "loi" &&
                 mobileTab !== "notes" &&
                 mobileTab !== "files"
