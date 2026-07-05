@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -52,7 +52,13 @@ const SECTIONS = [
 export function DealNotes() {
   const { activeDeal } = useDealStore();
 
-  const storageKey = activeDeal ? `dealdesk_notes_${activeDeal.id}` : null;
+  const dealId = activeDeal?.id ?? null;
+  const storageKey = dealId ? `dealdesk_notes_${dealId}` : null;
+
+  // Refs so the (stable) tiptap onUpdate closure always sees the current deal
+  const dealIdRef = useRef<string | null>(null);
+  dealIdRef.current = dealId;
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -69,29 +75,56 @@ export function DealNotes() {
       },
     },
     onUpdate: ({ editor }) => {
-      if (!storageKey) return;
+      const id = dealIdRef.current;
+      if (!id) return;
+      const html = editor.getHTML();
       try {
-        localStorage.setItem(storageKey, editor.getHTML());
+        localStorage.setItem(`dealdesk_notes_${id}`, html);
       } catch {
         // storage full or blocked
       }
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        fetch(`/api/deals/${id}/notes`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: html }),
+        }).catch(() => {});
+      }, 1200);
     },
   });
 
-  // Load saved content when deal changes
+  // Load content when deal changes: local user edits win, then DB
+  // (which may hold AI-generated DD notes), then the blank template.
   useEffect(() => {
-    if (!editor || !storageKey) return;
+    if (!editor || !dealId || !storageKey) return;
+    let cancelled = false;
+
+    let saved: string | null = null;
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        editor.commands.setContent(saved);
-      } else {
-        editor.commands.setContent(DEFAULT_NOTE_TEMPLATE);
-      }
+      saved = localStorage.getItem(storageKey);
     } catch {
-      editor.commands.setContent(DEFAULT_NOTE_TEMPLATE);
+      saved = null;
     }
-  }, [editor, storageKey]);
+    if (saved) {
+      editor.commands.setContent(saved);
+      return;
+    }
+
+    fetch(`/api/deals/${dealId}/notes`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        editor.commands.setContent(data.note?.content || DEFAULT_NOTE_TEMPLATE);
+      })
+      .catch(() => {
+        if (!cancelled) editor.commands.setContent(DEFAULT_NOTE_TEMPLATE);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, dealId, storageKey]);
 
   const scrollToSection = useCallback(
     (label: string) => {

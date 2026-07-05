@@ -219,3 +219,25 @@ export const REAL_RENT_ROLL_CSV_CONTENT = `Unit,Type,Rent,Market Rent,Status,Not
 490-5,1BR/1BA,625,700,Occupied,
 490-6,1BR/1BA,,700,Leased,725 signed
 `;
+
+export const CALVERT_PARSED_DOCUMENT = {
+  id: "test-doc-1",
+  deal_id: "test-deal-calvert",
+  name: "Calvert_Apartments_Example_Deal.csv",
+  file_type: "csv" as const,
+  storage_path: null,
+  file_size: 2048,
+  raw_text: REAL_RENT_ROLL_CSV_CONTENT,
+  status: "parsed" as const,
+  parse_error: null,
+  parsed_at: "2026-06-29T11:00:00Z",
+  created_at: "2026-06-29T10:30:00Z",
+  document_type: "rent_roll",
+  parse_confidence: "high" as const,
+  parse_warnings: [
+    "Repairs & Maintenance elevated at 19.2% of Annual Gross Income",
+    "Unit 490-4 pays only $178/mo with a lawncare arrangement — verify lease terms",
+  ],
+  extracted_unit_count: 18,
+  extracted_field_count: 6,
+};

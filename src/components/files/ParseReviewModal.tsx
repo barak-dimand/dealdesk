@@ -15,6 +15,61 @@ interface ParseReviewModalProps {
   onClose: () => void;
 }
 
+type WarningCategory = "opportunity" | "risk" | "verify" | "info";
+
+export function categorizeWarning(text: string): WarningCategory {
+  const t = text.toLowerCase();
+  if (t.includes("vacant") || t.includes("vacancy")) return "opportunity";
+  if (t.includes("below market") || t.includes("upside")) return "opportunity";
+  if (t.includes("elevated") || t.includes("exceeds") || t.includes("flag")) return "risk";
+  if (t.includes("mismatch") || t.includes("verify") || t.includes("confirm")) return "verify";
+  return "info";
+}
+
+export function whatToDo(text: string): string {
+  const t = text.toLowerCase();
+  if (t.includes("vacant") || t.includes("vacancy"))
+    return "Request move-out date and make-ready timeline from seller";
+  if (t.includes("below market") || t.includes("upside"))
+    return "Pull comparable rents for this market before submitting LOI";
+  if (t.includes("repair") || t.includes("r&m") || t.includes("maintenance"))
+    return "Request 3 years of repair & maintenance invoices and receipts";
+  if (t.includes("mismatch") || t.includes("unit count"))
+    return "Ask seller for complete unit list with addresses";
+  if (t.includes("credit") || t.includes("non-standard") || t.includes("lease"))
+    return "Request copy of lease for this unit";
+  return "Verify with seller before closing";
+}
+
+const WARNING_STYLE: Record<
+  WarningCategory,
+  { border: string; badge: string; label: string }
+> = {
+  opportunity: { border: "#2f6d4f", badge: "bg-[#eaf1ec] text-[#2f6d4f]", label: "💡 Opportunity" },
+  risk:        { border: "#a8473a", badge: "bg-[#f5eaea] text-[#a8473a]", label: "⚠️ Risk" },
+  verify:      { border: "#9a6b3f", badge: "bg-[#f7efe6] text-[#9a6b3f]", label: "✓ Verify" },
+  info:        { border: "#9b978f", badge: "bg-[#f1efe8] text-[#6b6862]", label: "ℹ️ Note" },
+};
+
+function WarningCard({ warning }: { warning: string }) {
+  const category = categorizeWarning(warning);
+  const style = WARNING_STYLE[category];
+  return (
+    <div
+      className="bg-white border border-[#e6e3dc] border-l-[3px] rounded-[8px] p-3"
+      style={{ borderLeftColor: style.border }}
+    >
+      <span className={cn("inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-[4px] mb-1.5", style.badge)}>
+        {style.label}
+      </span>
+      <p className="text-[12px] text-[#3a3833] leading-[1.5]">{warning}</p>
+      <p className="text-[11.5px] text-[#6b6862] mt-1.5 leading-[1.4]">
+        <span className="font-semibold text-[#2f5d50]">What to do:</span> {whatToDo(warning)}
+      </p>
+    </div>
+  );
+}
+
 function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low" | null }) {
   if (!confidence) return null;
   const map = {
@@ -203,17 +258,15 @@ export function ParseReviewModal({
             {/* Right — Extracted data (55%) */}
             <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
 
-              {/* Warnings */}
+              {/* Warnings — categorized with What-to-do suggestions */}
               {warnings.length > 0 && (
-                <div className="bg-[#fdf6ec] border border-[#d4a85a33] rounded-[10px] p-3.5">
+                <div>
                   <div className="text-[10.5px] font-bold uppercase tracking-[0.07em] text-[#9a6b3f] mb-2">
                     {warnings.length} {warnings.length === 1 ? "Warning" : "Warnings"}
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-2">
                     {warnings.map((w, i) => (
-                      <p key={i} className="text-[12px] text-[#7a5a3a] leading-[1.5]">
-                        · {w}
-                      </p>
+                      <WarningCard key={i} warning={w} />
                     ))}
                   </div>
                 </div>

@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { extractTextFromFile } from "@/lib/parsers/extractText";
 import { parseDocumentWithAI } from "@/lib/ai/parseDocument";
+import { generateDealNotesIfEmpty } from "@/lib/ai/generateNotes";
 
 const MAX_PROMPT_CHARS = 90000;
 
@@ -250,6 +251,11 @@ export async function POST(
         unit_count: totalUnits ?? 0,
       })
       .eq("id", dealId);
+
+    // Fire-and-forget: AI-generated DD notes (skips if deal_notes already has content)
+    generateDealNotesIfEmpty(supabase, dealId).catch((err) =>
+      console.error("Notes generation failed:", err)
+    );
 
     const parseConfidenceLabel = confidenceLabel(parsed.confidence);
     return NextResponse.json({

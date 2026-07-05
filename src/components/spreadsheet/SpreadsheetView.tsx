@@ -8,6 +8,7 @@ import { IncomeTab } from "./IncomeTab";
 import { ExpensesTab } from "./ExpensesTab";
 import { SummaryTab } from "./SummaryTab";
 import { EditDealModal } from "@/components/deals/EditDealModal";
+import { DealIntelligenceBanner } from "./DealIntelligenceBanner";
 import type { SheetTab } from "@/types";
 import { CheckCircle2, Loader2, Pencil } from "lucide-react";
 
@@ -75,6 +76,9 @@ export function SpreadsheetView() {
           </div>
         )}
       </div>
+
+      {/* Deal intelligence */}
+      <DealIntelligenceBanner />
 
       {/* Sheet content */}
       <div className="flex-1 min-h-0 overflow-auto">
