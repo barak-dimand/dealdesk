@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Schibsted Grotesk", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  --color-app-bg: #f6f5f1;
+  --color-surface: #ffffff;
+  --color-surface-hover: #faf8f3;
+  --color-border: #e6e3dc;
+  --color-border-light: #efece4;
+
+  --color-text-primary: #23211d;
+  --color-text-secondary: #3a3833;
+  --color-text-muted: #9b978f;
+  --color-text-faint: #b3aea3;
+
+  --color-accent: #2f5d50;
+  --color-accent-hover: #274e43;
+  --color-accent-soft: #2f5d5014;
+  --color-accent-border: #2f5d5033;
+  --color-accent-muted: #2f5d500a;
+
+  --color-positive: #2f6d4f;
+  --color-positive-bg: #eaf1ec;
+  --color-positive-border: #d4e3d9;
+
+  --color-negative: #a8473a;
+  --color-negative-bg: #f7ecec;
+  --color-negative-border: #ecd4d4;
+
+  --color-amber: #9a6b3f;
+  --color-amber-bg: #f7efe6;
+  --color-amber-border: #ecdcc7;
+
+  --color-rail-bg: #ffffff;
+  --color-sheet-bg: #f3f1ea;
+  --color-tab-active-bg: #ffffff;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--color-app-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d8d3c8;
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c4bdaf;
+  background-clip: content-box;
+}
+
+/* Typing dots animation */
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+
+/* Tiptap editor */
+.tiptap-editor {
+  outline: none;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--color-text-primary);
+  min-height: 400px;
+}
+
+.tiptap-editor h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+  line-height: 1.2;
+}
+
+.tiptap-editor h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 32px 0 11px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #ece9e2;
+}
+
+.tiptap-editor p {
+  margin: 0 0 12px;
+}
+
+.tiptap-editor ul,
+.tiptap-editor ol {
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+
+.tiptap-editor li {
+  margin-bottom: 7px;
+}
+
+.tiptap-editor strong {
+  font-weight: 700;
+}
+
+.tiptap-editor em {
+  font-style: italic;
+}
+
+.tiptap-editor a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.tiptap-editor .is-editor-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--color-text-faint);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Number inputs — remove spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
