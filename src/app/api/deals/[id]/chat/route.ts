@@ -1,6 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { parseActionBlock } from "@/lib/parseActionBlock";
+import type { ChatProposal } from "@/types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -28,16 +30,16 @@ export async function POST(
         .order("created_at", { ascending: false }),
       supabase
         .from("deal_data_fields")
-        .select("field_label, field_value, field_value_numeric, category, ai_note")
+        .select("field_key, field_label, field_value, field_value_numeric, category, ai_note")
         .eq("deal_id", dealId)
         .in("category", ["income", "expense", "summary"]),
       supabase
         .from("deal_units")
-        .select("unit_number, unit_type, current_rent, market_rent, status, tenant_notes")
+        .select("id, unit_number, unit_type, current_rent, market_rent, status, tenant_notes")
         .eq("deal_id", dealId),
       supabase
         .from("deal_units")
-        .select("unit_number, unit_type, current_rent, market_rent, status")
+        .select("id, unit_number, unit_type, current_rent, market_rent, status")
         .eq("deal_id", dealId),
       supabase
         .from("deal_offer_structures")
@@ -50,6 +52,19 @@ export async function POST(
         .order("created_at", { ascending: true })
         .limit(20),
     ]);
+
+  const [loiVersionsResult, pendingProposalsResult] = await Promise.all([
+    supabase
+      .from("deal_loi_versions")
+      .select("id, label, version_number")
+      .eq("deal_id", dealId)
+      .order("version_number", { ascending: true }),
+    supabase
+      .from("deal_chat_proposals")
+      .select("changes")
+      .eq("deal_id", dealId)
+      .eq("status", "pending"),
+  ]);
 
   const deal = dealResult.data;
   if (!deal) return new Response("Deal not found", { status: 404 });
@@ -88,16 +103,61 @@ export async function POST(
 
   const askingDollars = deal.asking_price ? deal.asking_price / 100 : null;
 
-  const systemPrompt = `You are an expert real estate investment analyst and advisor named "AI Analyst" for the platform Dealdesk.
-You specialize in creative finance, seller finance, subject-to, wrap mortgages, and no/low-money-down deal structuring.
-You help investors analyze deals, identify risks, structure creative offers, and maximize returns.
+  const loiVersions = loiVersionsResult.data ?? [];
+  const pendingProposalCount = (pendingProposalsResult.data ?? []).length;
+  const latestVersionLabel =
+    loiVersions.length > 0 ? loiVersions[loiVersions.length - 1].label : null;
+
+  const systemPrompt = `You are an AI analyst and deal assistant for a real estate investment app. You
+have full context of the deal's spreadsheet data, units, income, expenses, and
+any existing LOI. You specialize in creative finance, seller finance, subject-to, wrap mortgages,
+and no/low-money-down deal structuring.
+
+When the user asks you to draft an LOI, create offer terms, or update any deal
+data, you MUST respond with a structured JSON action block in addition to your
+conversational response. Format it as:
+
+<action>
+{
+  "type": "propose_changes",
+  "changes": [
+    {
+      "id": "uuid-here",
+      "type": "loi_draft|loi_term|data_field|unit|deal_status|notes",
+      "label": "Human readable label",
+      "oldValue": "current value or null",
+      "newValue": "proposed value",
+      "payload": { ... type-specific payload ... }
+    }
+  ]
+}
+</action>
+
+Payload shapes by change type:
+- loi_draft: { "loiDraft": { "sections": [{ "id", "label", "content", "sort_order" }], "terms": [{ "id", "label", "value", "value_numeric", "confidence": "verified|inferred|missing", "source", "is_required", "affected_section_ids": [] }] } } — include the FULL sections and terms
+- loi_term: { "termId": "...", "termValue": "..." }
+- data_field: { "fieldKey": "...", "fieldValueNumeric": 72000, "fieldValue": "$72,000/yr" } — fieldValueNumeric in the same units the field currently uses (annual dollars for income/expense/summary fields)
+- unit: { "unitId": "...", "unitRent": cents, "unitStatus": "occupied|vacant|leased|credit|other" } — use the unit id from the rent roll below
+- deal_status: { "dealStatus": "evaluating|off_market|marketed|under_loi|under_contract|closed|dead" }
+- notes: { "notesContent": "<full HTML notes content>" }
+
+Always write your conversational explanation BEFORE the <action> block.
+The <action> block is parsed by the app — do not explain it to the user.
+
+When the user asks about the deal, answer conversationally without an action block.
+Only include action blocks when the user is asking you to make or propose a change.
 
 CURRENT DEAL: ${deal.name}
 Type: ${deal.deal_type}
 Status: ${deal.status}
+LOI state: ${deal.loi_state ?? "none"}
 ${deal.city ? `Location: ${deal.city}, ${deal.state}` : ""}
 ${deal.unit_count ? `Units: ${deal.unit_count}` : ""}
 ${askingDollars ? `Asking price: $${askingDollars.toLocaleString()}` : ""}
+
+APP STATE:
+LOI versions: ${loiVersions.length}${latestVersionLabel ? ` (latest: ${latestVersionLabel})` : ""}
+Pending proposals awaiting user review: ${pendingProposalCount}${pendingProposalCount > 0 ? " — do not re-propose changes that are already pending" : ""}
 
 DOCUMENTS IN THIS DEAL (${docs.length} total):
 ${docs.map((d) => `- ${d.name} [${d.file_type}] — ${d.status}`).join("\n")}
@@ -108,18 +168,18 @@ Total expenses: $${totalExpenses.toLocaleString()}/yr
 Reported NOI: $${reportedNOI.toLocaleString()}/yr
 ${askingDollars && reportedNOI > 0 ? `Cap rate @ ask: ${((reportedNOI / askingDollars) * 100).toFixed(1)}%` : ""}
 
-INCOME ITEMS:
-${incomeFields.map((f) => `- ${f.field_label}: $${(f.field_value_numeric ?? 0).toLocaleString()}/yr`).join("\n")}
+INCOME ITEMS (field_key in brackets for data_field payloads):
+${incomeFields.map((f) => `- [${f.field_key}] ${f.field_label}: $${(f.field_value_numeric ?? 0).toLocaleString()}/yr`).join("\n")}
 
-EXPENSE ITEMS:
-${expenseFields.map((f) => `- ${f.field_label}: $${(f.field_value_numeric ?? 0).toLocaleString()}/yr${f.ai_note ? ` ⚑ ${f.ai_note}` : ""}`).join("\n")}
+EXPENSE ITEMS (field_key in brackets for data_field payloads):
+${expenseFields.map((f) => `- [${f.field_key}] ${f.field_label}: $${(f.field_value_numeric ?? 0).toLocaleString()}/yr${f.ai_note ? ` ⚑ ${f.ai_note}` : ""}`).join("\n")}
 
 RENT ROLL SUMMARY:
 In-place monthly rent: $${totalCurrentRent.toLocaleString()}/mo ($${(totalCurrentRent * 12).toLocaleString()}/yr)
 Market monthly rent: $${totalMarketRent.toLocaleString()}/mo ($${(totalMarketRent * 12).toLocaleString()}/yr)
 Rent upside: $${((totalMarketRent - totalCurrentRent) * 12).toLocaleString()}/yr
-Units:
-${(unitsResult.data ?? []).slice(0, 20).map((u) => `- Unit ${u.unit_number} (${u.unit_type ?? "?"}): $${(u.current_rent ?? 0) / 100}/mo in-place, $${(u.market_rent ?? 0) / 100}/mo market, ${u.status}`).join("\n")}
+Units (with ids for unit-update payloads):
+${(unitsResult.data ?? []).slice(0, 20).map((u) => `- [id: ${u.id}] Unit ${u.unit_number} (${u.unit_type ?? "?"}): $${(u.current_rent ?? 0) / 100}/mo in-place, $${(u.market_rent ?? 0) / 100}/mo market, ${u.status}`).join("\n")}
 
 ${offers.length > 0 ? `CURRENT OFFER STRUCTURES:
 ${offers.map((o) => `- ${o.name}: $${(o.purchase_price ?? 0) / 100} ask, $${(o.annual_debt_service ?? 0) / 100}/yr debt service, $${(o.net_cash_flow ?? 0) / 100}/yr NCF, ${o.dscr}x DSCR`).join("\n")}` : ""}
@@ -132,8 +192,8 @@ GUIDELINES FOR RESPONSES:
 - Flag data quality issues (e.g., if expenses seem elevated, explain why)
 - For offer structuring: focus on creative finance, seller finance, and minimum capital structures
 - Always show: debt service, cash to close, net cash flow, and DSCR for any structure
-- If asked to draft a document (offer letter, LOI, email), write the full draft
-- You can update the spreadsheet by noting "I recommend updating [field] to [value]"
+- If asked to draft a document (offer letter, LOI, email), write the full draft — for LOIs use a loi_draft action block
+- To update the spreadsheet, propose the change via a data_field action block
 - Keep responses concise but complete — investors are busy`;
 
   // Save user message
@@ -181,23 +241,64 @@ GUIDELINES FOR RESPONSES:
           }
         }
 
+        // Split conversational text from any <action> block
+        const { message: cleanMessage, changes } = parseActionBlock(fullContent);
+
+        // Save assistant message (clean text only — the action block lives in the proposal)
+        const { data: savedMsg } = await supabase
+          .from("deal_messages")
+          .insert({
+            deal_id: dealId,
+            role: "assistant",
+            content: cleanMessage || fullContent,
+          })
+          .select("id")
+          .single();
+
+        if (changes) {
+          const { data: proposalRow } = await supabase
+            .from("deal_chat_proposals")
+            .insert({
+              deal_id: dealId,
+              message_id: savedMsg?.id ?? `msg-${Date.now()}`,
+              changes,
+              status: "pending",
+              applied_change_ids: [],
+            })
+            .select()
+            .single();
+
+          if (proposalRow) {
+            const proposal: ChatProposal = {
+              id: proposalRow.id,
+              messageId: proposalRow.message_id,
+              dealId,
+              changes,
+              status: "pending",
+              appliedChangeIds: [],
+              createdAt: proposalRow.created_at,
+            };
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ proposal })}\n\n`)
+            );
+          }
+        }
+
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (e) {
+        console.error("Chat stream error:", e);
         controller.enqueue(
           encoder.encode(
             `data: ${JSON.stringify({ delta: { text: "Sorry, I encountered an error. Please try again." } })}\n\n`
           )
         );
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        fullContent = "Error processing request.";
+        await supabase.from("deal_messages").insert({
+          deal_id: dealId,
+          role: "assistant",
+          content: "Error processing request.",
+        });
       }
-
-      // Save assistant message
-      await supabase.from("deal_messages").insert({
-        deal_id: dealId,
-        role: "assistant",
-        content: fullContent,
-      });
 
       controller.close();
     },
@@ -210,4 +311,35 @@ GUIDELINES FOR RESPONSES:
       Connection: "keep-alive",
     },
   });
+}
+
+// PATCH — persist proposal status after apply/reject
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: dealId } = await params;
+  const { userId } = await auth();
+  if (!userId) return new Response("Unauthorized", { status: 401 });
+
+  const { proposalId, status, appliedChangeIds } = (await req.json()) as {
+    proposalId?: string;
+    status?: string;
+    appliedChangeIds?: string[];
+  };
+  if (!proposalId) return new Response("proposalId required", { status: 400 });
+
+  const supabase = await createAdminClient();
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (status !== undefined) updates.status = status;
+  if (appliedChangeIds !== undefined) updates.applied_change_ids = appliedChangeIds;
+
+  const { error } = await supabase
+    .from("deal_chat_proposals")
+    .update(updates)
+    .eq("id", proposalId)
+    .eq("deal_id", dealId);
+
+  if (error) return new Response(error.message, { status: 500 });
+  return Response.json({ success: true });
 }

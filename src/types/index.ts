@@ -138,6 +138,64 @@ export interface DealMessage {
   role: "user" | "assistant";
   content: string;
   created_at: string;
+  proposal?: ChatProposal;
+  loiDraft?: { sections: LOISection[]; terms: LOITerm[] };
+}
+
+// ─── Chat Command Center ───
+
+export type AppUpdateType =
+  | "loi_draft"        // AI drafted a full LOI in chat
+  | "loi_term"         // update a specific LOI term value
+  | "data_field"       // update a spreadsheet data field
+  | "unit"             // update a unit's rent/status
+  | "deal_status"      // update the deal status
+  | "notes";           // update notes content
+
+export interface ProposedChange {
+  id: string;                   // stable uuid for this change
+  type: AppUpdateType;
+  label: string;                // human readable e.g. "Reported NOI"
+  oldValue: string | null;      // formatted display value
+  newValue: string;             // formatted display value
+  payload: {
+    loiDraft?: { sections: LOISection[]; terms: LOITerm[] };
+    termId?: string;
+    termValue?: string;
+    fieldId?: string;
+    fieldKey?: string;
+    fieldValueNumeric?: number;
+    fieldValue?: string;
+    unitId?: string;
+    unitRent?: number;
+    unitStatus?: string;
+    dealStatus?: string;
+    notesContent?: string;
+  };
+}
+
+export interface ChatProposal {
+  id: string;
+  messageId: string;            // the AI message this came from
+  dealId: string;
+  changes: ProposedChange[];
+  status: "pending" | "partially_applied" | "applied" | "rejected";
+  appliedChangeIds: string[];   // which individual changes were accepted
+  createdAt: string;
+}
+
+export interface LOIVersion {
+  id: string;
+  deal_id: string;
+  version_number: number;
+  label: string;                // e.g. "v1 · From chat · Jun 29"
+  source: "chat" | "ai_generated" | "manual";
+  sections: LOISection[];
+  terms: LOITerm[];
+  loi_state: LOIState;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DealNote {

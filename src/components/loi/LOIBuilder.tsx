@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { FileText } from "lucide-react";
 import { useDealStore } from "@/store/dealStore";
 import { useAutoTermSync } from "@/hooks/useAutoTermSync";
+import { cn } from "@/lib/utils";
 import { LOIToolbar } from "./LOIToolbar";
 import { LOIDocument } from "./LOIDocument";
 import { LOITermPanel } from "./LOITermPanel";
@@ -18,7 +19,15 @@ interface LOIBuilderProps {
 }
 
 export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps) {
-  const { setLOI, updateDeal, activeDeal } = useDealStore();
+  const {
+    setLOI,
+    updateDeal,
+    activeDeal,
+    loiVersions,
+    setLOIVersions,
+    activeLoiVersionId,
+    setActiveLoiVersionId,
+  } = useDealStore();
 
   const [localLoiState, setLocalLoiState] = useState<LOIState>(loiState);
   const [localTerms, setLocalTerms] = useState<LOITerm[]>(loi?.terms ?? []);
@@ -71,6 +80,51 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
     }
   }, [dealId, loiState, loi, setLOI]);
 
+  // Fetch all LOI versions for this deal
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/deals/${dealId}/loi/versions`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled || !Array.isArray(data.versions)) return;
+        setLOIVersions(data.versions);
+        if (data.versions.length > 0) {
+          const currentActive = useDealStore.getState().activeLoiVersionId;
+          const stillPresent = data.versions.some(
+            (v: { id: string }) => v.id === currentActive
+          );
+          if (!stillPresent) {
+            setActiveLoiVersionId(data.versions[data.versions.length - 1].id);
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [dealId, setLOIVersions, setActiveLoiVersionId]);
+
+  // Load the active version's content into the editor when it changes
+  useEffect(() => {
+    const version = useDealStore
+      .getState()
+      .loiVersions.find((v) => v.id === activeLoiVersionId);
+    if (version) {
+      setLocalTerms(version.terms);
+      setOriginalTerms(version.terms);
+      replaceSections(version.sections);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLoiVersionId, loiVersions]);
+
+  // Section/term PATCHes target the active version when one exists
+  const getLoiPatchUrl = useCallback(() => {
+    const activeId = useDealStore.getState().activeLoiVersionId;
+    return activeId
+      ? `/api/deals/${dealId}/loi/versions/${activeId}`
+      : `/api/deals/${dealId}/loi`;
+  }, [dealId]);
+
   // Generate
   async function handleGenerate() {
     setLocalLoiState("generating");
@@ -89,6 +143,10 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
       if (!res.ok) throw new Error("Generation failed");
       const data = await res.json();
       setLOI(data.loi);
+      if (data.version) {
+        setLOIVersions([...useDealStore.getState().loiVersions, data.version]);
+        setActiveLoiVersionId(data.version.id);
+      }
       updateDeal(dealId, { loi_state: "draft" });
       setLocalLoiState("draft");
     } catch {
@@ -104,7 +162,7 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
       );
       if (sectionPatchTimer.current) clearTimeout(sectionPatchTimer.current);
       sectionPatchTimer.current = setTimeout(() => {
-        fetch(`/api/deals/${dealId}/loi`, {
+        fetch(getLoiPatchUrl(), {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sections: sectionsRef.current }),
@@ -113,7 +171,7 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
     },
     // updateSections and sectionsRef are stable (ref + functional setter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dealId]
+    [dealId, getLoiPatchUrl]
   );
 
   const { syncTermChange, highlightedSectionId } = useAutoTermSync({
@@ -121,6 +179,7 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
     terms: localTerms,
     sections: localSections,
     onSectionUpdate: handleSectionChange,
+    getPatchUrl: getLoiPatchUrl,
   });
 
   function handleTermChange(termId: string, newValue: string) {
@@ -265,6 +324,32 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
           overflow: "hidden",
         }}
       >
+        {/* Version selector */}
+        {loiVersions.length > 0 && (
+          <div className="flex items-center gap-1.5 px-4 py-2 bg-white border-b border-[#e6e3dc] overflow-x-auto flex-shrink-0">
+            {loiVersions.map((v) => (
+              <button
+                key={v.id}
+                onClick={() => setActiveLoiVersionId(v.id)}
+                className={cn(
+                  "px-3 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap cursor-pointer transition-colors flex-shrink-0",
+                  v.id === activeLoiVersionId
+                    ? "bg-[#2f5d50] text-white"
+                    : "text-[#6b6862] border border-[#e6e3dc] hover:bg-[#f4f2eb] hover:text-[#23211d]"
+                )}
+              >
+                {v.label}
+              </button>
+            ))}
+            <button
+              onClick={handleGenerate}
+              className="px-3 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap text-[#2f5d50] border border-dashed border-[#2f5d5060] hover:bg-[#2f5d500a] transition-colors cursor-pointer flex-shrink-0"
+            >
+              ＋ Generate new
+            </button>
+          </div>
+        )}
+
         <LOIToolbar
           loiState={localLoiState}
           sentAt={activeDeal?.loi_sent_at ?? null}

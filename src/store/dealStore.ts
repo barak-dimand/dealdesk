@@ -12,6 +12,8 @@ import type {
   DealOfferStructure,
   DealRecommendation,
   DealLOI,
+  ChatProposal,
+  LOIVersion,
 } from "@/types";
 
 interface DealState {
@@ -34,6 +36,9 @@ interface DealState {
   offerStructures: DealOfferStructure[];
   recommendation: DealRecommendation | null;
   loi: DealLOI | null;
+  proposals: ChatProposal[];
+  loiVersions: LOIVersion[];
+  activeLoiVersionId: string | null;
 
   // Loading state
   isLoadingDeals: boolean;
@@ -61,6 +66,10 @@ interface DealState {
   setOfferStructures: (offers: DealOfferStructure[]) => void;
   setRecommendation: (rec: DealRecommendation | null) => void;
   setLOI: (loi: DealLOI | null) => void;
+  addProposal: (proposal: ChatProposal) => void;
+  updateProposal: (id: string, updates: Partial<ChatProposal>) => void;
+  setLOIVersions: (versions: LOIVersion[]) => void;
+  setActiveLoiVersionId: (id: string | null) => void;
 
   setIsLoadingDeals: (v: boolean) => void;
   setIsLoadingDeal: (v: boolean) => void;
@@ -99,6 +108,9 @@ export const useDealStore = create<DealState>((set) => ({
   offerStructures: [],
   recommendation: null,
   loi: null,
+  proposals: [],
+  loiVersions: [],
+  activeLoiVersionId: null,
 
   isLoadingDeals: false,
   isLoadingDeal: false,
@@ -128,6 +140,16 @@ export const useDealStore = create<DealState>((set) => ({
   setOfferStructures: (offerStructures) => set({ offerStructures }),
   setRecommendation: (recommendation) => set({ recommendation }),
   setLOI: (loi) => set({ loi }),
+  addProposal: (proposal) =>
+    set((state) => ({ proposals: [...state.proposals, proposal] })),
+  updateProposal: (id, updates) =>
+    set((state) => ({
+      proposals: state.proposals.map((p) =>
+        p.id === id ? { ...p, ...updates } : p
+      ),
+    })),
+  setLOIVersions: (loiVersions) => set({ loiVersions }),
+  setActiveLoiVersionId: (activeLoiVersionId) => set({ activeLoiVersionId }),
 
   setIsLoadingDeals: (v) => set({ isLoadingDeals: v }),
   setIsLoadingDeal: (v) => set({ isLoadingDeal: v }),

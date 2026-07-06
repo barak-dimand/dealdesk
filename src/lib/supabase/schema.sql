@@ -379,3 +379,57 @@ alter table deal_documents add column if not exists parse_confidence     text;
 alter table deal_documents add column if not exists parse_warnings       jsonb default '[]';
 alter table deal_documents add column if not exists extracted_unit_count int;
 alter table deal_documents add column if not exists extracted_field_count int;
+
+-- ============================================================
+-- MIGRATION: Chat Command Center — LOI versions + chat proposals
+-- ============================================================
+create table if not exists deal_loi_versions (
+  id uuid primary key default gen_random_uuid(),
+  deal_id uuid references deals(id) on delete cascade not null,
+  version_number int not null default 1,
+  label text not null default 'v1',
+  source text not null default 'ai_generated', -- 'chat' | 'ai_generated' | 'manual'
+  sections jsonb not null default '[]',
+  terms jsonb not null default '[]',
+  loi_state text not null default 'draft',
+  sent_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table deal_loi_versions enable row level security;
+
+create policy "LOI versions access follows deal access"
+  on deal_loi_versions for all
+  using (
+    deal_id in (
+      select d.id from deals d
+      join workspaces w on w.id = d.workspace_id
+      where w.owner_clerk_id =
+        current_setting('request.jwt.claims', true)::jsonb->>'sub'
+    )
+  );
+
+create table if not exists deal_chat_proposals (
+  id uuid primary key default gen_random_uuid(),
+  deal_id uuid references deals(id) on delete cascade not null,
+  message_id text not null,
+  changes jsonb not null default '[]',
+  status text not null default 'pending',
+  applied_change_ids jsonb not null default '[]',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table deal_chat_proposals enable row level security;
+
+create policy "Proposals access follows deal access"
+  on deal_chat_proposals for all
+  using (
+    deal_id in (
+      select d.id from deals d
+      join workspaces w on w.id = d.workspace_id
+      where w.owner_clerk_id =
+        current_setting('request.jwt.claims', true)::jsonb->>'sub'
+    )
+  );

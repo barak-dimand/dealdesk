@@ -220,6 +220,50 @@ export const REAL_RENT_ROLL_CSV_CONTENT = `Unit,Type,Rent,Market Rent,Status,Not
 490-6,1BR/1BA,,700,Leased,725 signed
 `;
 
+export const CALVERT_PROPOSAL = {
+  id: "test-proposal-1",
+  messageId: "test-msg-1",
+  dealId: "test-deal-calvert",
+  changes: [
+    {
+      id: "chg-1",
+      type: "data_field" as const,
+      label: "Reported NOI",
+      oldValue: "$35,761",
+      newValue: "$72,000",
+      payload: {
+        fieldKey: "reported_noi",
+        fieldValueNumeric: 72000,
+        fieldValue: "$72,000",
+      },
+    },
+    {
+      id: "chg-2",
+      type: "unit" as const,
+      label: "Unit 470-6 rent",
+      oldValue: null,
+      newValue: "$825/mo",
+      payload: { unitId: "u6", unitRent: 82500, unitStatus: "leased" },
+    },
+    {
+      id: "chg-3",
+      type: "loi_draft" as const,
+      label: "LOI Draft — Seller Finance",
+      oldValue: null,
+      newValue: "New LOI draft",
+      payload: {
+        loiDraft: {
+          sections: CALVERT_LOI_DRAFT.sections,
+          terms: CALVERT_LOI_DRAFT.terms,
+        },
+      },
+    },
+  ],
+  status: "pending" as const,
+  appliedChangeIds: [] as string[],
+  createdAt: "2026-07-06T10:00:00Z",
+};
+
 export const CALVERT_PARSED_DOCUMENT = {
   id: "test-doc-1",
   deal_id: "test-deal-calvert",

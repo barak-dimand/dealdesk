@@ -5,7 +5,10 @@ import { useDealStore } from "@/store/dealStore";
 import { Brand } from "@/components/ui/Brand";
 import { cn } from "@/lib/utils";
 import { Send } from "lucide-react";
-import type { DealMessage } from "@/types";
+import { ProposalCard } from "./ProposalCard";
+import { useApplyProposal } from "@/hooks/useApplyProposal";
+import { parseActionBlock } from "@/lib/parseActionBlock";
+import type { DealMessage, ChatProposal } from "@/types";
 
 const SUGGESTED_PROMPTS = [
   "What is the real NOI based on the documents?",
@@ -71,7 +74,11 @@ export function AIChat() {
     addMessage,
     isChatStreaming,
     setIsChatStreaming,
+    proposals,
+    addProposal,
   } = useDealStore();
+
+  const { applyChanges, rejectProposal } = useApplyProposal(activeDeal?.id ?? "");
 
   const [input, setInput] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
@@ -115,6 +122,7 @@ export function AIChat() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let full = "";
+      let receivedProposal: ChatProposal | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -128,25 +136,33 @@ export function AIChat() {
             if (data === "[DONE]") continue;
             try {
               const parsed = JSON.parse(data);
+              if (parsed.proposal) {
+                receivedProposal = parsed.proposal as ChatProposal;
+                continue;
+              }
               const delta = parsed.delta?.text ?? parsed.choices?.[0]?.delta?.content ?? "";
               full += delta;
-              setStreamingContent(full);
+              // Hide the machine-readable <action> block while streaming
+              setStreamingContent(full.split("<action>")[0]);
             } catch {
               full += data;
-              setStreamingContent(full);
+              setStreamingContent(full.split("<action>")[0]);
             }
           }
         }
       }
 
+      const { message: cleanText } = parseActionBlock(full);
       const aiMsg: DealMessage = {
         id: `ai-${Date.now()}`,
         deal_id: activeDeal.id,
         role: "assistant",
-        content: full || "I processed your request.",
+        content: cleanText || "I processed your request.",
         created_at: new Date().toISOString(),
+        proposal: receivedProposal ?? undefined,
       };
       addMessage(aiMsg);
+      if (receivedProposal) addProposal(receivedProposal);
     } catch {
       const errMsg: DealMessage = {
         id: `ai-err-${Date.now()}`,
@@ -217,9 +233,25 @@ export function AIChat() {
           </div>
         )}
 
-        {messages.map((msg) => (
-          <Message key={msg.id} msg={msg} />
-        ))}
+        {messages.map((msg) => {
+          const liveProposal = msg.proposal
+            ? proposals.find((p) => p.id === msg.proposal!.id) ?? msg.proposal
+            : null;
+          return (
+            <div key={msg.id} className="flex flex-col gap-2">
+              <Message msg={msg} />
+              {liveProposal && (
+                <div className="ml-8 max-w-[85%]">
+                  <ProposalCard
+                    proposal={liveProposal}
+                    onApply={(ids) => applyChanges(liveProposal, ids)}
+                    onReject={() => rejectProposal(liveProposal)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {isChatStreaming && streamingContent ? (
           <div className="flex gap-2 items-end">

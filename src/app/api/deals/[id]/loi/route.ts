@@ -165,9 +165,31 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Versioning: every generation also creates a deal_loi_versions row so
+  // drafts accumulate instead of overwriting. deal_loi stays as the "current"
+  // document for existing PATCH/term-sync/send consumers.
+  const { count: versionCount } = await supabase
+    .from("deal_loi_versions")
+    .select("id", { count: "exact", head: true })
+    .eq("deal_id", id);
+  const versionNumber = (versionCount ?? 0) + 1;
+  const { data: version } = await supabase
+    .from("deal_loi_versions")
+    .insert({
+      deal_id: id,
+      version_number: versionNumber,
+      label: `v${versionNumber} · ${scenarioHint?.name ?? "AI generated"}`,
+      source: "ai_generated",
+      sections,
+      terms,
+      loi_state: "draft",
+    })
+    .select()
+    .single();
+
   await supabase.from("deals").update({ loi_state: "draft" }).eq("id", id);
 
-  return NextResponse.json({ loi });
+  return NextResponse.json({ loi, version: version ?? null });
 }
 
 // PATCH /api/deals/[id]/loi — update terms, sections, contact info, or send

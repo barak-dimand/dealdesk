@@ -8,6 +8,8 @@ interface UseAutoTermSyncOptions {
   terms: LOITerm[];
   sections: LOISection[];
   onSectionUpdate: (sectionId: string, newContent: string) => void;
+  /** Resolved at PATCH fire time — lets callers target a specific LOI version */
+  getPatchUrl?: () => string;
 }
 
 export function useAutoTermSync({
@@ -15,6 +17,7 @@ export function useAutoTermSync({
   terms,
   sections,
   onSectionUpdate,
+  getPatchUrl,
 }: UseAutoTermSyncOptions) {
   const [highlightedSectionId, setHighlightedSectionId] = useState<string | null>(null);
 
@@ -58,14 +61,15 @@ export function useAutoTermSync({
       // Debounced PATCH — reads latest terms from ref at fire time
       if (patchTimer.current) clearTimeout(patchTimer.current);
       patchTimer.current = setTimeout(() => {
-        fetch(`/api/deals/${dealId}/loi`, {
+        const url = getPatchUrl?.() ?? `/api/deals/${dealId}/loi`;
+        fetch(url, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ terms: termsRef.current }),
         });
       }, 1000);
     },
-    [dealId, onSectionUpdate]
+    [dealId, onSectionUpdate, getPatchUrl]
   );
 
   return { syncTermChange, highlightedSectionId };
