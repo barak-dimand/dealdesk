@@ -9,6 +9,7 @@ import { LOIToolbar } from "./LOIToolbar";
 import { LOIDocument } from "./LOIDocument";
 import { LOITermPanel } from "./LOITermPanel";
 import { LOISendModal } from "./LOISendModal";
+import { LOICompareModal } from "./LOICompareModal";
 import type { LOIState, DealLOI, LOITerm, LOISection } from "@/types";
 
 interface LOIBuilderProps {
@@ -33,6 +34,9 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
   const [localTerms, setLocalTerms] = useState<LOITerm[]>(loi?.terms ?? []);
   const [originalTerms, setOriginalTerms] = useState<LOITerm[]>(loi?.terms ?? []);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
+  // The version that was active before the user last switched pills
+  const prevVersionIdRef = useRef<string | null>(null);
   const [toastEmail, setToastEmail] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -330,7 +334,12 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
             {loiVersions.map((v) => (
               <button
                 key={v.id}
-                onClick={() => setActiveLoiVersionId(v.id)}
+                onClick={() => {
+                  if (v.id !== activeLoiVersionId) {
+                    prevVersionIdRef.current = activeLoiVersionId;
+                  }
+                  setActiveLoiVersionId(v.id);
+                }}
                 className={cn(
                   "px-3 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap cursor-pointer transition-colors flex-shrink-0",
                   v.id === activeLoiVersionId
@@ -347,6 +356,17 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
             >
               ＋ Generate new
             </button>
+            {loiVersions.length >= 2 && (
+              <>
+                <div className="flex-1" />
+                <button
+                  onClick={() => setShowCompare(true)}
+                  className="px-3 py-1 rounded-full text-[11.5px] font-medium whitespace-nowrap text-[#6b6862] border border-[#e6e3dc] hover:bg-[#f4f2eb] hover:text-[#23211d] transition-colors cursor-pointer flex-shrink-0"
+                >
+                  Compare
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -404,6 +424,30 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
       >
         <div className="text-[13px] text-[#9b978f]">Loading LOI…</div>
       </div>
+
+      {/* Version compare modal */}
+      {showCompare && (() => {
+        const right =
+          loiVersions.find((v) => v.id === activeLoiVersionId) ??
+          loiVersions[loiVersions.length - 1];
+        if (!right) return null;
+        const activeIdx = loiVersions.findIndex((v) => v.id === right.id);
+        const left =
+          loiVersions.find(
+            (v) => v.id === prevVersionIdRef.current && v.id !== right.id
+          ) ??
+          loiVersions[activeIdx - 1] ??
+          loiVersions.find((v) => v.id !== right.id);
+        if (!left) return null;
+        return (
+          <LOICompareModal
+            open={showCompare}
+            onClose={() => setShowCompare(false)}
+            left={left}
+            right={right}
+          />
+        );
+      })()}
 
       {/* Send modal — unmounts on close so state resets automatically */}
       {showSendModal && (

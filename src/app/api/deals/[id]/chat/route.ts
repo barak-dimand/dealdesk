@@ -2,7 +2,8 @@ import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { parseActionBlock } from "@/lib/parseActionBlock";
-import type { ChatProposal } from "@/types";
+import { buildTermsFromPartial, fillAllSections } from "@/lib/loi/loiTemplate";
+import type { ChatProposal, ProposedChange } from "@/types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -134,7 +135,17 @@ conversational response. Format it as:
 </action>
 
 Payload shapes by change type:
-- loi_draft: { "loiDraft": { "sections": [{ "id", "label", "content", "sort_order" }], "terms": [{ "id", "label", "value", "value_numeric", "confidence": "verified|inferred|missing", "source", "is_required", "affected_section_ids": [] }] } } — include the FULL sections and terms
+- loi_draft: return ONLY the term values in the payload, not full section prose. The app generates the document from these terms using a locked template:
+  { "loiTerms": [
+      { "id": "offer_price", "value": "$270,000", "value_numeric": 27000000 },
+      { "id": "financing_structure", "value": "Seller Financing" },
+      { "id": "down_payment", "value": "$13,500", "value_numeric": 1350000 },
+      { "id": "down_payment_pct", "value": "5" },
+      { "id": "loan_amount", "value": "$256,500", "value_numeric": 25650000 },
+      { "id": "interest_rate", "value": "6" },
+      { "id": "loan_term", "value": "30 years" }
+    ] }
+  Include only the terms the user specified or that can be inferred from deal data. Valid term ids: offer_price, financing_structure, down_payment, down_payment_pct, loan_amount, interest_rate, loan_term, first_payment_deferral, balloon_prepayment, earnest_money, due_diligence_period, closing_timeline, contingencies, buyer_name_entity, seller_agent_name, seller_agent_email, property_address. Money value_numeric is in cents. Do NOT write LOI prose.
 - loi_term: { "termId": "...", "termValue": "..." }
 - data_field: { "fieldKey": "...", "fieldValueNumeric": 72000, "fieldValue": "$72,000/yr" } — fieldValueNumeric in the same units the field currently uses (annual dollars for income/expense/summary fields)
 - unit: { "unitId": "...", "unitRent": cents, "unitStatus": "occupied|vacant|leased|credit|other" } — use the unit id from the rent roll below
@@ -242,7 +253,25 @@ GUIDELINES FOR RESPONSES:
         }
 
         // Split conversational text from any <action> block
-        const { message: cleanMessage, changes } = parseActionBlock(fullContent);
+        const { message: cleanMessage, changes: rawChanges } = parseActionBlock(fullContent);
+
+        // loi_draft proposals arrive as term values only — fill the locked
+        // template server-side so the proposal carries complete sections
+        const changes: ProposedChange[] | null = rawChanges
+          ? rawChanges.map((c) => {
+              if (c.type === "loi_draft" && c.payload.loiTerms && !c.payload.loiDraft) {
+                const terms = buildTermsFromPartial(c.payload.loiTerms);
+                return {
+                  ...c,
+                  payload: {
+                    ...c.payload,
+                    loiDraft: { sections: fillAllSections(terms), terms },
+                  },
+                };
+              }
+              return c;
+            })
+          : null;
 
         // Save assistant message (clean text only — the action block lives in the proposal)
         const { data: savedMsg } = await supabase

@@ -160,6 +160,9 @@ export interface ProposedChange {
   newValue: string;             // formatted display value
   payload: {
     loiDraft?: { sections: LOISection[]; terms: LOITerm[] };
+    /** loi_draft proposals from chat carry term values only; the app fills
+     *  the locked template to produce sections */
+    loiTerms?: Array<{ id: string; value?: string | null; value_numeric?: number | null }>;
     termId?: string;
     termValue?: string;
     fieldId?: string;

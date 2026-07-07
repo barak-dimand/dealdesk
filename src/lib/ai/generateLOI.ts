@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { fillAllSections } from "@/lib/loi/loiTemplate";
 import type { LOITerm, LOISection } from "@/types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -47,9 +48,12 @@ function isMissingValue(v: string | null | undefined): boolean {
   return v.startsWith("[");
 }
 
-// ─── fallback fixture (used when Claude returns unparseable JSON) ─────────────
+// ─── deterministic base terms from deal data ─────────────────────────────────
+// The visible 15 terms plus hidden template-only terms (property_address,
+// interest_rate, down_payment_pct, buyer_entity) that fill placeholders but
+// are not listed in the LOI term panel.
 
-function generateLOIMock(ctx: LOIContext): LOIGenerationResult {
+function buildBaseTerms(ctx: LOIContext): LOITerm[] {
   const recommended =
     ctx.offerStructures.find((o) => o.is_recommended) ??
     ctx.offerStructures[0] ??
@@ -58,13 +62,13 @@ function generateLOIMock(ctx: LOIContext): LOIGenerationResult {
   const propertyLine =
     [ctx.dealAddress, ctx.dealCity, ctx.dealState].filter(Boolean).join(", ") ||
     "the above-referenced property";
-  const today = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
 
-  const terms: LOITerm[] = [
+  const downPct =
+    recommended?.purchase_price && recommended?.down_payment != null
+      ? String(Math.round((recommended.down_payment / recommended.purchase_price) * 100))
+      : null;
+
+  return [
     {
       id: "offer_price",
       label: "Offer Price",
@@ -217,109 +221,55 @@ function generateLOIMock(ctx: LOIContext): LOIGenerationResult {
       is_required: false,
       affected_section_ids: ["contingencies"],
     },
-  ];
-
-  const offerPriceStr = formatCents(recommended?.purchase_price ?? null) ?? "[OFFER PRICE]";
-  const downStr = formatCents(recommended?.down_payment ?? null) ?? "[DOWN PAYMENT]";
-  const loanStr = formatCents(recommended?.financed_amount ?? null) ?? "[LOAN AMOUNT]";
-  const termStr = recommended?.term_years ? `${recommended.term_years} years` : "[LOAN TERM]";
-  const deferMonths = recommended?.first_payment_defer_months ?? 0;
-  const deferStr = deferMonths > 0 ? `${deferMonths} months` : null;
-
-  const sections: LOISection[] = [
+    // Hidden template-only terms (not shown in the term panel)
     {
-      id: "parties",
-      label: "Date & Parties",
-      content: `This Letter of Intent ("LOI") is entered into as of ${today} by and between ${ctx.buyerEntity ?? "[BUYER NAME / ENTITY]"} ("Buyer") and ${ctx.contactName ?? "[SELLER NAME]"} ("Seller"), with respect to the real property commonly known as ${propertyLine} (the "Property").`,
-      sort_order: 1,
+      id: "property_address",
+      label: "Property Address",
+      value: propertyLine,
+      value_numeric: null,
+      confidence: "verified",
+      source: "Deal record",
+      is_required: false,
+      affected_section_ids: ["parties"],
     },
     {
-      id: "intent",
-      label: "Subject & Intent",
-      content: `Buyer hereby expresses its non-binding intent to acquire the Property subject to the terms outlined below. This LOI does not constitute a binding contract and is intended solely as a basis for negotiation of a definitive Purchase and Sale Agreement.`,
-      sort_order: 2,
+      id: "interest_rate",
+      label: "Interest Rate",
+      value: recommended?.interest_rate != null ? String(recommended.interest_rate) : null,
+      value_numeric: null,
+      confidence: recommended?.interest_rate != null ? "inferred" : "missing",
+      source: recommended ? "Pulled from recommendation engine" : null,
+      is_required: false,
+      affected_section_ids: ["financing_terms"],
     },
     {
-      id: "purchase_price",
-      label: "Purchase Price",
-      content: `The proposed purchase price for the Property is ${offerPriceStr}. This price reflects current market conditions, in-place income, and the operating profile of the asset as presented.`,
-      sort_order: 3,
+      id: "down_payment_pct",
+      label: "Down Payment %",
+      value: downPct,
+      value_numeric: null,
+      confidence: downPct ? "inferred" : "missing",
+      source: downPct ? "Computed from offer structure" : null,
+      is_required: false,
+      affected_section_ids: ["financing_terms"],
     },
     {
-      id: "financing_terms",
-      label: "Financing Terms",
-      content: [
-        "Buyer proposes the following financing structure:",
-        "",
-        `• Structure: ${recommended?.name ?? "[FINANCING STRUCTURE]"}`,
-        `• Purchase Price: ${offerPriceStr}`,
-        `• Down Payment: ${downStr}`,
-        `• Seller-Carried Note: ${loanStr}`,
-        `• Term: ${termStr}`,
-        ...(deferStr ? [`• First Payment Deferral: ${deferStr}`] : []),
-        `• Balloon: ${recommended?.has_balloon ? "Yes" : "None"}`,
-        "",
-        "Specific rate, amortization, and payment schedule to be detailed in the Purchase and Sale Agreement.",
-      ].join("\n"),
-      sort_order: 4,
-    },
-    {
-      id: "earnest_money",
-      label: "Earnest Money",
-      content: `Buyer shall deposit [EARNEST MONEY AMOUNT] as earnest money within 3 business days of execution of the Purchase and Sale Agreement. Earnest money shall be held in escrow by [TITLE COMPANY] and shall be refundable during the Due Diligence Period.`,
-      sort_order: 5,
-    },
-    {
-      id: "due_diligence",
-      label: "Due Diligence Period",
-      content: `Buyer shall have ${ctx.ddPeriodDays ?? 30} days from the execution of the Purchase and Sale Agreement to conduct its due diligence, including but not limited to: physical inspection, review of all financial records (T12, rent roll, leases), environmental assessment, and title review. During this period, earnest money shall be fully refundable at Buyer's sole discretion.`,
-      sort_order: 6,
-    },
-    {
-      id: "closing",
-      label: "Closing",
-      content: `The closing of this transaction shall occur within 45 days from the execution of the Purchase and Sale Agreement, or such other date as mutually agreed by both parties. Closing shall take place through a title company mutually acceptable to both parties.`,
-      sort_order: 7,
-    },
-    {
-      id: "contingencies",
-      label: "Contingencies",
-      content: `This LOI and any resulting Purchase and Sale Agreement shall be contingent upon:\n\n• Buyer's satisfactory review of all financial statements and operating records\n• Buyer's satisfactory physical inspection of the Property\n• Seller's delivery of all requested documents within 5 business days of execution\n\n[Additional contingencies to be added based on due diligence findings]`,
-      sort_order: 8,
-    },
-    {
-      id: "expiration",
-      label: "Expiration",
-      content: `This LOI shall expire at 5:00 PM local time, 5 business days from the date above, unless accepted in writing by Seller prior to such time.`,
-      sort_order: 9,
-    },
-    {
-      id: "signature",
-      label: "Signature Block",
-      content: `Respectfully submitted,\n\n[BUYER NAME]\n[ENTITY NAME]\nDate: ${today}\n\n\n_________________________\nSeller Acknowledgment\nDate: ___________________`,
-      sort_order: 10,
+      id: "buyer_entity",
+      label: "Buyer Entity",
+      value: ctx.buyerEntity ?? null,
+      value_numeric: null,
+      confidence: ctx.buyerEntity ? "verified" : "missing",
+      source: ctx.buyerEntity ? "User settings" : null,
+      is_required: false,
+      affected_section_ids: ["signature"],
     },
   ];
-
-  return { terms, sections };
 }
 
-// ─── real Claude implementation ───────────────────────────────────────────────
+// ─── generation: Claude extracts term VALUES only; prose comes from the
+// locked template in src/lib/loi/loiTemplate.ts ─────────────────────────────
 
 export async function generateLOI(ctx: LOIContext): Promise<LOIGenerationResult> {
-  const recommended =
-    ctx.offerStructures.find((o) => o.is_recommended) ??
-    ctx.offerStructures[0] ??
-    null;
-
-  const propertyLine =
-    [ctx.dealAddress, ctx.dealCity, ctx.dealState].filter(Boolean).join(", ") ||
-    "the above-referenced property";
-  const today = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const baseTerms = buildBaseTerms(ctx);
 
   const fieldLines = ctx.dataFields
     .map(
@@ -328,136 +278,77 @@ export async function generateLOI(ctx: LOIContext): Promise<LOIGenerationResult>
     )
     .join("\n");
 
-  const deferMonths = recommended?.first_payment_defer_months ?? 0;
+  const baseTermLines = baseTerms
+    .map((t) => `  ${t.id}: ${t.value ?? "null"}`)
+    .join("\n");
 
-  const offerStructureLines = recommended
-    ? [
-        `  Name: ${recommended.name}`,
-        `  Structure type: ${recommended.structure_type}`,
-        `  Purchase price: ${formatCents(recommended.purchase_price) ?? "N/A"}`,
-        `  Down payment: ${formatCents(recommended.down_payment) ?? "N/A"}`,
-        `  Financed amount: ${formatCents(recommended.financed_amount) ?? "N/A"}`,
-        `  Interest rate: ${recommended.interest_rate != null ? `${recommended.interest_rate}%` : "N/A"}`,
-        `  Term: ${recommended.term_years != null ? `${recommended.term_years} years` : "N/A"}`,
-        `  First payment deferral: ${deferMonths > 0 ? `${deferMonths} months` : "None"}`,
-        `  Balloon: ${recommended.has_balloon ? "Yes" : "None"}`,
-      ].join("\n")
-    : "  No offer structure provided";
+  const systemPrompt = `You are a real estate LOI terms extractor. Given the deal data, extract the specific values for each LOI term. Return ONLY valid JSON — no prose, no explanation, no markdown, no code fences.
 
-  const systemPrompt = `You are a real estate Letter of Intent drafting assistant. Generate a complete professional LOI as valid JSON only. Use exact numbers from the deal data — no placeholders for values you actually have. Only use [PLACEHOLDER TEXT] syntax for values genuinely missing from the input (buyer entity name, earnest money amount, title company). Return only the JSON object, no markdown, no explanation, no code fences.
+Return this exact shape:
+{
+  "terms": [
+    { "id": "offer_price", "value": "$1,050,000", "value_numeric": 105000000, "confidence": "verified|inferred|missing" }
+  ]
+}
 
-The 'parties' section must be formatted as a professional letter opening paragraph — NOT as a memo with To:/From:/Email:/Re: fields. It should read as flowing prose that names the buyer entity, the seller, and the property address. Example format: 'This Letter of Intent ("LOI") is entered into as of [date] by and between [BUYER NAME / ENTITY] ("Buyer") and [SELLER NAME] ("Seller"), with respect to the real property commonly known as [Property Address], [City], [State] (the "Property").'`;
+Include an entry for every term id you can determine a value for. Use null for values genuinely missing from the deal data. value_numeric is in cents for money terms, null otherwise.
+Do not write any LOI prose. Only extract term values from the deal data provided.`;
 
-  const ddDays = ctx.ddPeriodDays ?? 30;
-  const buyerEntityStr = ctx.buyerEntity ?? null;
-
-  const userPrompt = `Generate a Letter of Intent for this deal. Today's date: ${today}
+  const userPrompt = `Extract LOI term values for this deal.
 
 DEAL: ${ctx.dealName}
-Property: ${propertyLine}
-Seller / Agent: ${ctx.contactName ?? "[SELLER NAME]"}
-Seller email: ${ctx.contactEmail ?? "[SELLER EMAIL]"}
-Buyer entity: ${buyerEntityStr ?? "[BUYER NAME / ENTITY] (unknown — use placeholder)"}
-Due diligence period: ${ddDays} days
+Property: ${[ctx.dealAddress, ctx.dealCity, ctx.dealState].filter(Boolean).join(", ") || "unknown"}
+Seller / Agent: ${ctx.contactName ?? "unknown"}
+Seller email: ${ctx.contactEmail ?? "unknown"}
+Buyer entity: ${ctx.buyerEntity ?? "unknown"}
+Due diligence period: ${ctx.ddPeriodDays ?? 30} days
 
-OFFER STRUCTURE (recommended):
-${offerStructureLines}
+CURRENT BASE TERM VALUES (derived from the offer structure — refine or fill gaps only where the deal data supports it):
+${baseTermLines}
 
 DEAL DATA FIELDS:
 ${fieldLines || "  No additional fields"}
 
-Return a JSON object with exactly this shape. Use real values where available; use null (not a string) when a value is genuinely unavailable:
-{
-  "terms": [
-    { "id": "offer_price", "value": "<dollar amount, e.g. '$450,000'>" },
-    { "id": "financing_structure", "value": "<structure description>" },
-    { "id": "down_payment", "value": "<dollar amount or null>" },
-    { "id": "loan_amount", "value": "<dollar amount or null>" },
-    { "id": "loan_term", "value": "<e.g. '30 years' or null>" },
-    { "id": "first_payment_deferral", "value": "<e.g. '2 months' — or 'None' if no deferral>" },
-    { "id": "balloon_prepayment", "value": "<'Balloon included' or 'None'>" },
-    { "id": "earnest_money", "value": null },
-    { "id": "due_diligence_period", "value": "${ddDays} days" },
-    { "id": "closing_timeline", "value": "45 days from execution" },
-    { "id": "contingencies", "value": null },
-    { "id": "buyer_name_entity", "value": ${JSON.stringify(buyerEntityStr)} },
-    { "id": "seller_agent_name", "value": ${JSON.stringify(ctx.contactName)} },
-    { "id": "seller_agent_email", "value": ${JSON.stringify(ctx.contactEmail)} },
-    { "id": "commission_handling", "value": null }
-  ],
-  "sections": [
-    { "id": "parties", "content": "<full section text — use today's date ${today}, buyer entity name if provided, real seller name if available, real property address>" },
-    { "id": "intent", "content": "<full non-binding intent clause>" },
-    { "id": "purchase_price", "content": "<purchase price section — use exact dollar amount>" },
-    { "id": "financing_terms", "content": "<full financing terms — use exact numbers from offer structure; omit the first payment deferral bullet if deferral is None>" },
-    { "id": "earnest_money", "content": "<earnest money clause — use [EARNEST MONEY AMOUNT] and [TITLE COMPANY] placeholders>" },
-    { "id": "due_diligence", "content": "<${ddDays}-day due diligence clause>" },
-    { "id": "closing", "content": "<45-day closing clause>" },
-    { "id": "contingencies", "content": "<standard contingencies clause>" },
-    { "id": "expiration", "content": "<5-business-day LOI expiration clause>" },
-    { "id": "signature", "content": "<signature block — use buyer entity name if provided, else [BUYER NAME] / [ENTITY NAME] placeholders; include today's date ${today}>" }
-  ]
-}`;
+Term ids to extract: offer_price, financing_structure, down_payment, down_payment_pct, loan_amount, interest_rate, loan_term, first_payment_deferral, balloon_prepayment, earnest_money, due_diligence_period, closing_timeline, contingencies, buyer_name_entity, seller_agent_name, seller_agent_email, commission_handling, property_address.`;
 
-  const response = await client.messages.create({
-    model: "claude-opus-4-7",
-    max_tokens: 8096,
-    system: systemPrompt,
-    messages: [{ role: "user", content: userPrompt }],
-  });
-
-  const rawText =
-    response.content[0].type === "text" ? response.content[0].text : "";
-
-  // Strip markdown code fences Claude sometimes adds
-  const cleaned = rawText
-    .replace(/^```json?\s*/im, "")
-    .replace(/\s*```\s*$/im, "")
-    .trim();
-
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    console.error("[generateLOI] No JSON in Claude response:", rawText.slice(0, 800));
-    return generateLOIMock(ctx);
-  }
-
-  let raw: {
-    terms?: Array<{ id: string; value: string | null }>;
-    sections?: Array<{ id: string; content: string }>;
-  };
+  let terms = baseTerms;
   try {
-    raw = JSON.parse(jsonMatch[0]);
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+
+    const rawText =
+      response.content[0].type === "text" ? response.content[0].text : "";
+    const cleaned = rawText
+      .replace(/^```json?\s*/im, "")
+      .replace(/\s*```\s*$/im, "")
+      .trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const raw = JSON.parse(jsonMatch[0]) as {
+        terms?: Array<{ id: string; value: string | null; value_numeric?: number | null }>;
+      };
+      const valueMap = new Map((raw.terms ?? []).map((t) => [t.id, t]));
+      terms = baseTerms.map((term) => {
+        const extracted = valueMap.get(term.id);
+        if (!extracted || isMissingValue(extracted.value)) return term;
+        return {
+          ...term,
+          value: extracted.value,
+          value_numeric: extracted.value_numeric ?? term.value_numeric,
+          confidence: term.confidence === "missing" ? "inferred" : term.confidence,
+          source: term.value ? term.source : "Extracted by AI from deal data",
+        };
+      });
+    }
   } catch (e) {
-    console.error("[generateLOI] JSON parse error:", e, "\nJSON:", jsonMatch[0].slice(0, 800));
-    return generateLOIMock(ctx);
+    console.error("[generateLOI] term extraction failed — using base terms:", e);
   }
 
-  // Get the base structure (correct metadata: is_required, affected_section_ids, value_numeric, etc.)
-  // then overlay Claude's content where provided.
-  const mockResult = generateLOIMock(ctx);
-  const termValueMap = new Map((raw.terms ?? []).map((t) => [t.id, t.value]));
-  const sectionContentMap = new Map((raw.sections ?? []).map((s) => [s.id, s.content]));
-
-  const terms: LOITerm[] = mockResult.terms.map((term) => {
-    if (!termValueMap.has(term.id)) return term;
-    const claudeValue = termValueMap.get(term.id) ?? null;
-    const isActualValue = !isMissingValue(claudeValue);
-    return {
-      ...term,
-      value: claudeValue,
-      // Upgrade "missing" to "inferred" when Claude provides a real value;
-      // preserve "verified" and existing "inferred" states unchanged.
-      confidence:
-        term.confidence === "missing" && isActualValue ? "inferred" : term.confidence,
-      source: isActualValue ? "Generated by AI from deal data" : term.source,
-    };
-  });
-
-  const sections: LOISection[] = mockResult.sections.map((section) => {
-    const claudeContent = sectionContentMap.get(section.id);
-    if (!claudeContent) return section;
-    return { ...section, content: claudeContent };
-  });
-
+  // Prose is ALWAYS the locked template — only values differ between versions
+  const sections = fillAllSections(terms);
   return { terms, sections };
 }

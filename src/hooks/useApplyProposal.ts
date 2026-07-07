@@ -2,6 +2,7 @@
 
 import { toast } from "sonner";
 import { useDealStore } from "@/store/dealStore";
+import { buildTermsFromPartial, fillAllSections } from "@/lib/loi/loiTemplate";
 import type { ChatProposal, ProposedChange, DealStatus } from "@/types";
 
 async function applyChange(dealId: string, change: ProposedChange): Promise<void> {
@@ -10,13 +11,20 @@ async function applyChange(dealId: string, change: ProposedChange): Promise<void
 
   switch (change.type) {
     case "loi_draft": {
-      if (!p.loiDraft) throw new Error("Missing LOI draft payload");
+      // Server-filled drafts carry loiDraft; term-only payloads are filled
+      // here from the locked template with defaults merged in
+      let draft = p.loiDraft;
+      if (!draft && p.loiTerms) {
+        const terms = buildTermsFromPartial(p.loiTerms);
+        draft = { sections: fillAllSections(terms), terms };
+      }
+      if (!draft) throw new Error("Missing LOI draft payload");
       const res = await fetch(`/api/deals/${dealId}/loi/versions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sections: p.loiDraft.sections,
-          terms: p.loiDraft.terms,
+          sections: draft.sections,
+          terms: draft.terms,
           source: "chat",
         }),
       });

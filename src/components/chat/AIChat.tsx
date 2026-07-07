@@ -82,6 +82,7 @@ export function AIChat() {
 
   const [input, setInput] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -89,7 +90,7 @@ export function AIChat() {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
-  }, [messages, isChatStreaming, streamingContent]);
+  }, [messages, isChatStreaming, streamingContent, isGenerating]);
 
   async function send(text?: string) {
     const content = (text ?? input).trim();
@@ -106,6 +107,7 @@ export function AIChat() {
     };
     addMessage(userMsg);
     setIsChatStreaming(true);
+    setIsGenerating(true);
     setStreamingContent("");
 
     try {
@@ -142,10 +144,12 @@ export function AIChat() {
               }
               const delta = parsed.delta?.text ?? parsed.choices?.[0]?.delta?.content ?? "";
               full += delta;
+              if (full.length > 0) setIsGenerating(false);
               // Hide the machine-readable <action> block while streaming
               setStreamingContent(full.split("<action>")[0]);
             } catch {
               full += data;
+              if (full.length > 0) setIsGenerating(false);
               setStreamingContent(full.split("<action>")[0]);
             }
           }
@@ -175,6 +179,7 @@ export function AIChat() {
       addMessage(errMsg);
     } finally {
       setIsChatStreaming(false);
+      setIsGenerating(false);
       setStreamingContent("");
     }
   }
@@ -253,7 +258,9 @@ export function AIChat() {
           );
         })}
 
-        {isChatStreaming && streamingContent ? (
+        {isGenerating ? (
+          <TypingIndicator />
+        ) : isChatStreaming && streamingContent ? (
           <div className="flex gap-2 items-end">
             <div className="w-6 h-6 rounded-[6px] bg-[#2f5d50] flex items-center justify-center flex-shrink-0">
               <div className="w-[8px] h-[8px] bg-white rotate-45 rounded-[1px]" />
@@ -263,8 +270,6 @@ export function AIChat() {
               <span className="inline-block w-[2px] h-[14px] bg-[#9b978f] ml-0.5 animate-pulse align-middle" />
             </div>
           </div>
-        ) : isChatStreaming ? (
-          <TypingIndicator />
         ) : null}
       </div>
 
@@ -292,12 +297,12 @@ export function AIChat() {
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             placeholder="Ask, inquire, or tell the AI to update the sheet…"
-            disabled={!activeDeal || isChatStreaming}
+            disabled={!activeDeal || isChatStreaming || isGenerating}
             className="flex-1 resize-none max-h-[120px] border border-[#e0dccf] rounded-[11px] px-3 py-[10px] text-[13px] text-[#23211d] placeholder-[#b3aea3] outline-none focus:border-[#2f5d50] transition-colors bg-[#faf8f3] disabled:opacity-50 leading-[1.4]"
           />
           <button
             onClick={() => send()}
-            disabled={!input.trim() || !activeDeal || isChatStreaming}
+            disabled={!input.trim() || !activeDeal || isChatStreaming || isGenerating}
             className="w-[38px] h-[38px] flex-shrink-0 rounded-[10px] bg-[#2f5d50] text-white flex items-center justify-center hover:bg-[#274e43] disabled:opacity-40 transition-colors cursor-pointer"
           >
             <Send size={15} />
