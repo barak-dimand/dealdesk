@@ -53,7 +53,7 @@ export default function DealPage() {
         }
 
         if (!res.ok) {
-          router.replace("/deals");
+          router.replace("/opportunities");
           return;
         }
         const data = await res.json();

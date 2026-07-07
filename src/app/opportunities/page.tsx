@@ -2,17 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DealHeader } from "@/components/deals/DealHeader";
-import { DealView } from "@/components/deals/DealView";
-import { NewDealModal } from "@/components/deals/NewDealModal";
 import { useDealStore } from "@/store/dealStore";
-import { Brand } from "@/components/ui/Brand";
+import { NewDealModal } from "@/components/deals/NewDealModal";
+import { Chip } from "@/components/ui/Chip";
+import { dealStatusLabel, dealTypeLabel, formatCentsFull } from "@/lib/utils";
+import type { DealStatus } from "@/types";
 import { Plus } from "lucide-react";
 
-export default function DealsPage() {
+function statusTone(
+  status: DealStatus
+): "positive" | "negative" | "amber" | "blue" | "default" {
+  if (status === "off_market") return "positive";
+  if (status === "under_loi" || status === "under_contract") return "blue";
+  if (status === "marketed") return "amber";
+  if (status === "dead") return "negative";
+  return "default";
+}
+
+export default function OpportunitiesPage() {
   const router = useRouter();
-  const { setDeals, setActiveDeal, setActiveDealId, setIsLoadingDeals, deals } =
-    useDealStore();
+  const { deals, setDeals, setIsLoadingDeals } = useDealStore();
   const [showNewDeal, setShowNewDeal] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -24,11 +33,6 @@ export default function DealsPage() {
         if (res.ok) {
           const { deals: fetchedDeals } = await res.json();
           setDeals(fetchedDeals ?? []);
-          if (fetchedDeals?.length > 0) {
-            setActiveDeal(fetchedDeals[0]);
-            setActiveDealId(fetchedDeals[0].id);
-            router.replace(`/deals/${fetchedDeals[0].id}`);
-          }
         }
       } finally {
         setIsLoadingDeals(false);
@@ -36,41 +40,75 @@ export default function DealsPage() {
       }
     }
     loadDeals();
-  }, []);
+  }, [setDeals, setIsLoadingDeals]);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-[#f6f5f1]">
-      <DealHeader />
-      {loaded && deals.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
-          <Brand size="lg" showName={false} />
-          <div className="text-center">
-            <h2 className="text-[22px] font-bold tracking-[-0.02em] mb-2">
-              Welcome to Dealdesk
-            </h2>
-            <p className="text-[14px] text-[#9b978f] max-w-[360px]">
-              Create your first deal and upload documents — rent rolls, T12s,
-              offer memos — to start analyzing.
+    <div className="h-full overflow-y-auto bg-[#f6f5f1]">
+      <div className="max-w-[900px] mx-auto px-6 py-8 flex flex-col gap-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[20px] font-bold tracking-[-0.02em] text-[#23211d]">
+              Opportunities
+            </h1>
+            <p className="text-[12.5px] text-[#9b978f] mt-0.5">
+              Deals you&apos;re evaluating, negotiating, or closing.
             </p>
           </div>
           <button
             onClick={() => setShowNewDeal(true)}
-            className="flex items-center gap-2 px-5 py-3 bg-[#2f5d50] text-white text-[14px] font-semibold rounded-[10px] hover:bg-[#274e43] transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#2f5d50] text-white text-[13px] font-semibold rounded-[10px] hover:bg-[#274e43] transition-colors cursor-pointer"
           >
-            <Plus size={16} />
-            Create your first deal
+            <Plus size={14} strokeWidth={2.5} />
+            New opportunity
           </button>
         </div>
-      ) : !loaded ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-6 h-6 border-2 border-[#2f5d50] border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : (
-        <DealView />
-      )}
-      {showNewDeal && (
-        <NewDealModal onClose={() => setShowNewDeal(false)} />
-      )}
+
+        {!loaded ? (
+          <div className="flex flex-col gap-2">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-[68px] rounded-[12px] bg-white border border-[#e6e3dc] animate-pulse" />
+            ))}
+          </div>
+        ) : deals.length === 0 ? (
+          <div className="bg-white border border-[#e6e3dc] rounded-[12px] py-16 text-center">
+            <p className="text-[14px] font-semibold text-[#23211d] mb-1">
+              No opportunities yet
+            </p>
+            <p className="text-[12.5px] text-[#9b978f]">
+              Create your first deal and upload documents to start analyzing.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {deals.map((deal) => (
+              <button
+                key={deal.id}
+                onClick={() => router.push(`/opportunities/${deal.id}`)}
+                className="flex items-center gap-4 bg-white border border-[#e6e3dc] rounded-[12px] px-4 py-3.5 text-left hover:border-[#2f5d5060] hover:shadow-[0_2px_10px_rgba(40,35,25,0.06)] transition-all cursor-pointer"
+              >
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                  <span className="text-[14px] font-semibold text-[#23211d] truncate">
+                    {deal.name}
+                  </span>
+                  <span className="text-[11.5px] text-[#9b978f]">
+                    {[deal.city, deal.state].filter(Boolean).join(", ")}
+                    {deal.unit_count ? ` · ${deal.unit_count} units` : ""}
+                  </span>
+                </div>
+                <span className="text-[11px] font-semibold text-[#8a857a] uppercase tracking-[0.03em] flex-shrink-0">
+                  {dealTypeLabel(deal.deal_type)}
+                </span>
+                <Chip label={dealStatusLabel(deal.status)} tone={statusTone(deal.status)} />
+                <span className="text-[13px] font-mono text-[#23211d] w-[110px] text-right flex-shrink-0">
+                  {deal.asking_price ? formatCentsFull(deal.asking_price) : "—"}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showNewDeal && <NewDealModal onClose={() => setShowNewDeal(false)} />}
     </div>
   );
 }

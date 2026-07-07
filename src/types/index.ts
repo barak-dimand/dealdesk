@@ -356,3 +356,61 @@ export interface DealWithMetrics extends Deal {
   display_metric: string;
   is_parsing: boolean;
 }
+
+// ─── Platform sections: Portfolio, CRM, Buyers ───
+
+export interface PortfolioAsset {
+  id: string;
+  workspace_id: string;
+  origin_deal_id: string | null;
+  name: string;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  asset_class: string;
+  status: "active" | "stabilizing" | "refinancing" | "listed" | "sold";
+  purchase_price: number | null;
+  purchase_date: string | null;
+  current_value: number | null;
+  unit_count: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CRMContact {
+  id: string;
+  workspace_id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  tags: string[];
+  notes: string | null;
+  last_contacted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Buyer {
+  id: string;
+  workspace_id: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  buy_box: {
+    markets?: string[];
+    asset_classes?: string[];
+    min_units?: number;
+    max_units?: number;
+    min_price?: number;
+    max_price?: number;
+    min_cap_rate?: number;
+    financing_types?: string[];
+  };
+  notes: string | null;
+  deals_sent: number;
+  last_contacted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}

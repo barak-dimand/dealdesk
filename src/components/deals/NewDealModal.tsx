@@ -137,7 +137,7 @@ export function NewDealModal({ onClose }: { onClose: () => void }) {
       }
 
       onClose();
-      router.push(`/deals/${deal.id}`);
+      router.push(`/opportunities/${deal.id}`);
     } catch (e) {
       setError("Something went wrong. Please try again.");
     } finally {

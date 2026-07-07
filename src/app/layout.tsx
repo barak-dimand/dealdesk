@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Schibsted_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "sonner";
+import { AppSidebar } from "@/components/nav/AppSidebar";
 import "./globals.css";
 
 const schibsted = Schibsted_Grotesk({
@@ -35,7 +36,12 @@ export default function RootLayout({
         className={`${schibsted.variable} ${ibmMono.variable} h-full`}
       >
         <body className="h-full">
-          {children}
+          <div className="flex h-screen overflow-hidden">
+            <AppSidebar />
+            <main className="flex-1 min-w-0 h-full overflow-hidden">
+              {children}
+            </main>
+          </div>
           <Toaster position="bottom-right" richColors />
         </body>
       </html>

@@ -72,7 +72,6 @@ export function DealView() {
     document.body.style.userSelect = "none";
   }
 
-  const showRail = layout !== "focus";
   const showRecommendationInCenter = layout === "command";
   const centerTabsToShow = showRecommendationInCenter
     ? CENTER_TABS
@@ -80,16 +79,7 @@ export function DealView() {
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
-      {/* RAIL — desktop only */}
-      <aside
-        className={cn(
-          "hidden md:flex flex-col flex-shrink-0 border-r border-[#e6e3dc] bg-white overflow-hidden",
-          !showRail && "!hidden"
-        )}
-        style={{ width: 248 }}
-      >
-        <DealRail />
-      </aside>
+      {/* Desktop deal rail now lives in AppSidebar */}
 
       {/* MOBILE: Deals tab */}
       <div

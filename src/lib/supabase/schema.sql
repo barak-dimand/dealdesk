@@ -433,3 +433,74 @@ create policy "Proposals access follows deal access"
         current_setting('request.jwt.claims', true)::jsonb->>'sub'
     )
   );
+
+-- ============================================================
+-- MIGRATION: Platform Restructure — Portfolio, CRM, Buyers
+-- ============================================================
+create table if not exists portfolio_assets (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid references workspaces(id) on delete cascade not null,
+  origin_deal_id uuid references deals(id) on delete set null,
+  name text not null,
+  address text,
+  city text,
+  state text,
+  asset_class text not null default 'multifamily',
+  status text not null default 'active',
+  purchase_price bigint,
+  purchase_date date,
+  current_value bigint,
+  unit_count int,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table portfolio_assets enable row level security;
+create policy "Portfolio access follows workspace"
+  on portfolio_assets for all
+  using (workspace_id in (
+    select id from workspaces
+    where owner_clerk_id = current_setting('request.jwt.claims', true)::jsonb->>'sub'
+  ));
+
+create table if not exists crm_contacts (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid references workspaces(id) on delete cascade not null,
+  full_name text not null,
+  email text,
+  phone text,
+  company text,
+  tags text[] not null default '{}',
+  notes text,
+  last_contacted_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table crm_contacts enable row level security;
+create policy "CRM access follows workspace"
+  on crm_contacts for all
+  using (workspace_id in (
+    select id from workspaces
+    where owner_clerk_id = current_setting('request.jwt.claims', true)::jsonb->>'sub'
+  ));
+
+create table if not exists buyers (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid references workspaces(id) on delete cascade not null,
+  full_name text not null,
+  email text,
+  phone text,
+  company text,
+  buy_box jsonb not null default '{}',
+  notes text,
+  deals_sent int not null default 0,
+  last_contacted_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table buyers enable row level security;
+create policy "Buyers access follows workspace"
+  on buyers for all
+  using (workspace_id in (
+    select id from workspaces
+    where owner_clerk_id = current_setting('request.jwt.claims', true)::jsonb->>'sub'
+  ));

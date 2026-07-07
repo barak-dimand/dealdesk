@@ -5,5 +5,5 @@ import { NewDealModal } from "@/components/deals/NewDealModal";
 
 export default function NewDealPage() {
   const router = useRouter();
-  return <NewDealModal onClose={() => router.push("/deals")} />;
+  return <NewDealModal onClose={() => router.push("/opportunities")} />;
 }

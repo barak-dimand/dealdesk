@@ -5,6 +5,7 @@ import { vi } from "vitest";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useParams: () => ({ id: "test-deal-id" }),
+  usePathname: () => "/",
 }));
 
 // Mock Clerk auth

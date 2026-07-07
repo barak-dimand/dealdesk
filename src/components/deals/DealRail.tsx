@@ -38,7 +38,7 @@ function DealItem({ deal }: { deal: Deal }) {
     setActiveDeal(deal);
     setCenterTab("sheet");
     setSheetTab("rentroll");
-    if (!active) router.push(`/deals/${deal.id}`);
+    if (!active) router.push(`/opportunities/${deal.id}`);
   }
 
   const metric = deal.asking_price ? formatCents(deal.asking_price) : "—";
@@ -125,7 +125,7 @@ export function DealRail() {
       {/* New deal button */}
       <div className="px-3.5 pt-3.5 pb-2.5 flex-shrink-0">
         <button
-          onClick={() => router.push("/deals/new")}
+          onClick={() => router.push("/opportunities/new")}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-[10px] border border-[#2f5d5033] bg-[#2f5d5014] text-[#2f5d50] text-[13px] font-semibold hover:bg-[#2f5d501f] transition-colors cursor-pointer"
         >
           <Plus size={14} strokeWidth={2.5} />

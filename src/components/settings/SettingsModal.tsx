@@ -7,7 +7,7 @@ import { Settings, X } from "lucide-react";
 const BUYER_ENTITY_KEY = "dealdesk_buyer_entity";
 const DD_PERIOD_KEY = "dealdesk_dd_period";
 
-export function SettingsModal() {
+export function SettingsModal({ trigger }: { trigger?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [buyerEntity, setBuyerEntity] = useState("");
   const [ddPeriod, setDdPeriod] = useState("30");
@@ -34,12 +34,14 @@ export function SettingsModal() {
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <button
-          aria-label="Settings"
-          className="w-8 h-8 flex items-center justify-center rounded-[8px] text-[#9b978f] hover:bg-[#f4f2eb] hover:text-[#23211d] transition-colors cursor-pointer"
-        >
-          <Settings size={18} />
-        </button>
+        {trigger ?? (
+          <button
+            aria-label="Settings"
+            className="w-8 h-8 flex items-center justify-center rounded-[8px] text-[#9b978f] hover:bg-[#f4f2eb] hover:text-[#23211d] transition-colors cursor-pointer"
+          >
+            <Settings size={18} />
+          </button>
+        )}
       </Dialog.Trigger>
 
       <Dialog.Portal>
