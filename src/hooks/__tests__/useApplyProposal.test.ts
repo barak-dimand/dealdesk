@@ -34,7 +34,8 @@ const MOCK_VERSION = {
 };
 
 function mockFetch() {
-  const fn = vi.fn((url: string, _init?: RequestInit) => {
+  const fn = vi.fn((...args: [url: string, init?: RequestInit]) => {
+    const [url] = args;
     if (url.includes("/loi/versions")) {
       return Promise.resolve({ ok: true, json: async () => ({ version: MOCK_VERSION }) });
     }

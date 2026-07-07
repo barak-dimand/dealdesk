@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Settings, X } from "lucide-react";
 
@@ -14,13 +14,15 @@ export function SettingsModal({ trigger }: { trigger?: React.ReactNode }) {
   const [saved, setSaved] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (open) {
+  // Load persisted values when the dialog opens (event handler, not effect)
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (next) {
       setBuyerEntity(localStorage.getItem(BUYER_ENTITY_KEY) ?? "");
       setDdPeriod(localStorage.getItem(DD_PERIOD_KEY) ?? "30");
       setSaved(false);
     }
-  }, [open]);
+  }
 
   function handleSave() {
     localStorage.setItem(BUYER_ENTITY_KEY, buyerEntity.trim());
@@ -32,7 +34,7 @@ export function SettingsModal({ trigger }: { trigger?: React.ReactNode }) {
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Trigger asChild>
         {trigger ?? (
           <button

@@ -1,15 +1,18 @@
 "use client";
 
 import * as Tooltip from "@radix-ui/react-tooltip";
+import { toast } from "sonner";
 import { Copy, Download, Send, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { LOIState } from "@/types";
+import { exportLOIAsPDF } from "@/lib/loi/exportPDF";
+import type { LOIState, LOISection } from "@/types";
 
 interface LOIToolbarProps {
   loiState: LOIState;
   sentAt: string | null;
+  dealName: string;
+  sections: LOISection[];
   onCopy: () => void;
-  onDownloadPDF: () => void;
   onSend: () => void;
   onRevise: () => void;
   requiredTermsMissing: boolean;
@@ -25,13 +28,19 @@ function formatSentDate(sentAt: string): string {
 export function LOIToolbar({
   loiState,
   sentAt,
+  dealName,
+  sections,
   onCopy,
-  onDownloadPDF,
   onSend,
   onRevise,
   requiredTermsMissing,
 }: LOIToolbarProps) {
   const isDisabled = loiState === "generating" || loiState === "none";
+
+  async function handleDownloadPDF() {
+    toast("Preparing PDF…", { duration: 1500 });
+    await exportLOIAsPDF(dealName, sections);
+  }
 
   return (
     <Tooltip.Provider delayDuration={400}>
@@ -46,27 +55,15 @@ export function LOIToolbar({
           Copy
         </button>
 
-        <Tooltip.Root>
-          <Tooltip.Trigger asChild>
-            <button
-              disabled
-              aria-label="Download PDF"
-              className="flex items-center gap-1.5 px-3 py-[5px] text-[12.5px] text-[#6b6862] border border-[#e6e3dc] rounded-[8px] opacity-40 cursor-not-allowed"
-            >
-              <Download size={12} />
-              Download PDF
-            </button>
-          </Tooltip.Trigger>
-          <Tooltip.Portal>
-            <Tooltip.Content
-              className="bg-[#23211d] text-white text-[11.5px] px-2.5 py-1.5 rounded-[6px] shadow-md z-50"
-              sideOffset={5}
-            >
-              Coming soon
-              <Tooltip.Arrow className="fill-[#23211d]" />
-            </Tooltip.Content>
-          </Tooltip.Portal>
-        </Tooltip.Root>
+        <button
+          onClick={handleDownloadPDF}
+          disabled={isDisabled || sections.length === 0}
+          aria-label="Download PDF"
+          className="flex items-center gap-1.5 px-3 py-[5px] text-[12.5px] text-[#6b6862] border border-[#e6e3dc] rounded-[8px] hover:bg-[#f4f2eb] hover:text-[#23211d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+        >
+          <Download size={12} />
+          Download PDF
+        </button>
 
         <div className="flex-1" />
 

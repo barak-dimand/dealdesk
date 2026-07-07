@@ -90,7 +90,7 @@ function WarningsBadge({ warnings }: { warnings: string[] }) {
 }
 
 export function FilesPanel() {
-  const { activeDeal, documents, dataFields, units, addDocument, updateDocumentStatus, setDocuments } =
+  const { activeDeal, documents, addDocument, updateDocumentStatus, setDocuments } =
     useDealStore();
   const [isPasting, setIsPasting] = useState(false);
   const [pasteText, setPasteText] = useState("");

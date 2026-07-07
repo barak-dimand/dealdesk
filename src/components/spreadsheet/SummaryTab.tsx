@@ -7,7 +7,7 @@ import {
   formatPercent,
   formatDSCR,
 } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 import type { DealOfferStructure, DealDataField } from "@/types";
 
 // Summary field_value is often stored as a raw number string (e.g. "1125000")
@@ -65,11 +65,6 @@ function DebtServiceBlock({ offer }: { offer: DealOfferStructure }) {
   const noi = offer.projected_noi ?? 0;
   const ncf = offer.net_cash_flow ?? noi - annualDS;
   const dscr = offer.dscr;
-
-  const ncfTone =
-    ncf > 0 ? "positive" : ncf < 0 ? "negative" : "default";
-  const dscrTone =
-    dscr == null ? "default" : dscr >= 1.2 ? "positive" : dscr >= 1.0 ? "amber" : "negative";
 
   return (
     <div className="border border-[#2f5d5033] bg-[#2f5d500a] rounded-[10px] overflow-hidden">
@@ -208,8 +203,7 @@ function DebtServiceBlock({ offer }: { offer: DealOfferStructure }) {
 }
 
 export function SummaryTab() {
-  const { dataFields, offerStructures, activeDeal, documents } =
-    useDealStore();
+  const { dataFields, offerStructures, activeDeal } = useDealStore();
 
   const summaryFields = dataFields
     .filter((f) => f.category === "summary")

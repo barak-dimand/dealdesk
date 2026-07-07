@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { toast } from "sonner";
 import { X, FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -56,11 +57,22 @@ export function LOISendModal({
       const res = await fetch(`/api/deals/${dealId}/loi`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ loi_state: "sent", contact_email: to.trim() }),
+        body: JSON.stringify({
+          loi_state: "sent",
+          contact_email: to.trim(),
+          subject,
+          cover_note: coverNote,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Failed to send LOI");
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data.emailSent === false) {
+        toast.warning(
+          "LOI saved but email delivery failed — check your Resend configuration"
+        );
       }
       onSuccess(to.trim());
     } catch (err) {

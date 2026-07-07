@@ -31,7 +31,7 @@ export function NewDealModal({ onClose }: { onClose: () => void }) {
   const { addDeal, addDocument } = useDealStore();
 
   const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
+  const [address] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [dealType, setDealType] = useState<DealType>("multifamily");
@@ -138,7 +138,7 @@ export function NewDealModal({ onClose }: { onClose: () => void }) {
 
       onClose();
       router.push(`/opportunities/${deal.id}`);
-    } catch (e) {
+    } catch {
       setError("Something went wrong. Please try again.");
     } finally {
       setIsCreating(false);

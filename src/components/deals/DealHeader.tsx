@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { UserButton } from "@clerk/nextjs";
 import { Brand } from "@/components/ui/Brand";
 import { Chip } from "@/components/ui/Chip";

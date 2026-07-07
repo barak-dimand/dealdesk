@@ -12,7 +12,6 @@ import {
   Italic,
   List,
   ListOrdered,
-  Link2,
   Heading2,
 } from "lucide-react";
 
@@ -72,9 +71,12 @@ export function DealNotes() {
   // so we must (re)load when the Notes tab actually becomes visible.
   const notesVisible = centerTab === "notes" || mobileTab === "notes";
 
-  // Refs so the (stable) tiptap onUpdate closure always sees the current deal
+  // Refs so the (stable) tiptap onUpdate closure always sees the current deal.
+  // Ref writes happen in an effect — never during render.
   const dealIdRef = useRef<string | null>(null);
-  dealIdRef.current = dealId;
+  useEffect(() => {
+    dealIdRef.current = dealId;
+  }, [dealId]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editor = useEditor({
@@ -162,9 +164,6 @@ export function DealNotes() {
   const scrollToSection = useCallback(
     (label: string) => {
       if (!editor) return;
-      const el = document.querySelector(
-        `.tiptap-editor h2`
-      ) as HTMLElement | null;
       // Find the heading with matching text
       document.querySelectorAll(".tiptap-editor h2").forEach((heading) => {
         if (heading.textContent === label) {

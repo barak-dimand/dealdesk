@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateLOI } from "@/lib/ai/generateLOI";
+import { sendLOIEmail } from "@/lib/email/sendLOI";
 import type { LOITerm, LOISection } from "@/types";
 
 async function getWorkspaceId(
@@ -209,6 +210,8 @@ export async function PATCH(
     contact_name?: string;
     contact_email?: string;
     loi_state?: string;
+    subject?: string;
+    cover_note?: string;
   };
 
   const supabase = await createAdminClient();
@@ -217,7 +220,7 @@ export async function PATCH(
 
   const { data: deal } = await supabase
     .from("deals")
-    .select("id")
+    .select("id, name, contact_name, contact_email")
     .eq("id", id)
     .eq("workspace_id", workspaceId)
     .single();
@@ -244,6 +247,7 @@ export async function PATCH(
   if (body.contact_email !== undefined) dealUpdates.contact_email = body.contact_email;
   if (body.loi_state !== undefined) dealUpdates.loi_state = body.loi_state;
 
+  let emailSent: boolean | null = null;
   if (body.loi_state === "sent") {
     dealUpdates.loi_sent_at = new Date().toISOString();
 
@@ -251,7 +255,7 @@ export async function PATCH(
       .from("deal_loi")
       .select("id, terms, sections")
       .eq("deal_id", id)
-      .single();
+      .maybeSingle();
 
     if (currentLoi) {
       const { count } = await supabase
@@ -268,6 +272,39 @@ export async function PATCH(
         sent_at: dealUpdates.loi_sent_at,
       });
     }
+
+    // Deliver the LOI by email — versions-only deals fall back to the latest version
+    let sections: LOISection[] | null = currentLoi?.sections ?? null;
+    if (!sections) {
+      const { data: latestVersion } = await supabase
+        .from("deal_loi_versions")
+        .select("sections")
+        .eq("deal_id", id)
+        .order("version_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      sections = latestVersion?.sections ?? null;
+    }
+
+    const toEmail = body.contact_email ?? deal.contact_email;
+    if (toEmail && sections) {
+      const emailResult = await sendLOIEmail({
+        toEmail,
+        toName: body.contact_name ?? deal.contact_name ?? "there",
+        dealName: deal.name,
+        subject: body.subject ?? `Letter of Intent — ${deal.name}`,
+        coverNote: body.cover_note ?? "",
+        sections,
+      });
+      emailSent = emailResult.success;
+      if (!emailResult.success) {
+        // LOI state is still saved — email failure is surfaced to the client
+        console.error("[LOI send] email delivery failed:", emailResult.error);
+      }
+    } else {
+      emailSent = false;
+      console.error("[LOI send] missing recipient email or LOI sections — email skipped");
+    }
   }
 
   if (Object.keys(dealUpdates).length > 0) {
@@ -283,5 +320,5 @@ export async function PATCH(
     loi = data;
   }
 
-  return NextResponse.json({ loi });
+  return NextResponse.json({ loi, emailSent });
 }

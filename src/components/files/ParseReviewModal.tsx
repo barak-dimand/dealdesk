@@ -6,7 +6,7 @@ import { X, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useDealStore } from "@/store/dealStore";
 import { cn, formatFileSize } from "@/lib/utils";
-import type { DealDocument, DealUnit, DealDataField } from "@/types";
+import type { DealDocument, DealDataField } from "@/types";
 
 interface ParseReviewModalProps {
   document: DealDocument;
@@ -123,8 +123,11 @@ export function ParseReviewModal({
   onClose,
 }: ParseReviewModalProps) {
   const { units, dataFields, updateDocumentStatus, updateDocument } = useDealStore();
+  // The modal mounts fresh each time it opens, so the loading state can be
+  // derived at mount via lazy initializer (no sync setState in the effect)
+  const isImageDoc = doc.file_type === "image" && !!doc.storage_path;
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageLoading, setImageLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState<boolean>(() => isImageDoc);
 
   const docUnits = units.filter((u) => u.document_id === doc.id);
   const docFields = dataFields.filter((f) => f.document_id === doc.id);
@@ -139,15 +142,14 @@ export function ParseReviewModal({
     summaryFields.length > 0;
 
   useEffect(() => {
-    if (open && doc.file_type === "image" && doc.storage_path) {
-      setImageLoading(true);
+    if (open && isImageDoc) {
       fetch(`/api/deals/${dealId}/documents/${doc.id}/url`)
         .then((r) => r.json())
         .then((data) => setImageUrl(data.url ?? null))
         .catch(() => setImageUrl(null))
         .finally(() => setImageLoading(false));
     }
-  }, [open, doc.id, doc.file_type, doc.storage_path, dealId]);
+  }, [open, doc.id, isImageDoc, dealId]);
 
   function handleReparse() {
     updateDocumentStatus(doc.id, "parsing");
@@ -241,7 +243,10 @@ export function ParseReviewModal({
                       Loading image…
                     </div>
                   ) : imageUrl ? (
-                    <img src={imageUrl} alt={doc.name} className="max-w-full rounded-[8px]" />
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- 120s signed URL; next/image optimization adds no value */}
+                      <img src={imageUrl} alt={doc.name} className="max-w-full rounded-[8px]" />
+                    </>
                   ) : (
                     <p className="text-[12px] text-[#b3aea3] italic">Image not available.</p>
                   )

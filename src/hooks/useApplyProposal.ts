@@ -48,8 +48,20 @@ async function applyChange(dealId: string, change: ProposedChange): Promise<void
     }
 
     case "loi_term": {
-      const loi = state.loi;
-      if (!loi || !p.termId) throw new Error("No LOI loaded or missing termId");
+      if (!p.termId) throw new Error("Missing termId");
+      let loi = state.loi;
+      // LOI may not be in the store yet if the user hasn't visited the LOI tab
+      if (!loi) {
+        const loiRes = await fetch(`/api/deals/${dealId}/loi`);
+        if (loiRes.ok) {
+          const data = await loiRes.json();
+          if (data.loi) {
+            loi = data.loi;
+            state.setLOI(data.loi);
+          }
+        }
+      }
+      if (!loi) throw new Error("No LOI exists for this deal yet");
       const updatedTerms = loi.terms.map((t) =>
         t.id === p.termId ? { ...t, value: p.termValue ?? change.newValue } : t
       );

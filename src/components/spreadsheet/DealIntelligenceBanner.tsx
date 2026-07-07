@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useDealStore } from "@/store/dealStore";
 import { formatCentsFull } from "@/lib/utils";
@@ -80,20 +80,19 @@ function Card({
 export function DealIntelligenceBanner() {
   const { activeDeal, units, dataFields, documents, recommendation, setCenterTab } =
     useDealStore();
-  const [collapsed, setCollapsed] = useState(false);
-  const [reviewDoc, setReviewDoc] = useState<DealDocument | null>(null);
-
   const dealId = activeDeal?.id ?? null;
   const storageKey = dealId ? `dealdesk_intel_collapsed_${dealId}` : null;
 
-  useEffect(() => {
-    if (!storageKey) return;
+  // Lazy initializer — parent remounts this component per deal via key={deal.id}
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined" || !storageKey) return false;
     try {
-      setCollapsed(localStorage.getItem(storageKey) === "1");
+      return localStorage.getItem(storageKey) === "1";
     } catch {
-      setCollapsed(false);
+      return false;
     }
-  }, [storageKey]);
+  });
+  const [reviewDoc, setReviewDoc] = useState<DealDocument | null>(null);
 
   const parsedDocs = documents.filter((d) => d.status === "parsed");
   if (!activeDeal || parsedDocs.length === 0) return null;

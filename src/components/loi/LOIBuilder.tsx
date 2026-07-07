@@ -36,43 +36,38 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
   const [showSendModal, setShowSendModal] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
   // The version that was active before the user last switched pills
-  const prevVersionIdRef = useRef<string | null>(null);
+  const [compareBaseId, setCompareBaseId] = useState<string | null>(null);
   const [toastEmail, setToastEmail] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [localSections, setLocalSections] = useState<LOISection[]>(loi?.sections ?? []);
 
-  // Sections: both state (for renders) and ref (for stable timer closures)
+  // Ref mirror of sections for stable debounced-PATCH closures; ref writes
+  // happen in an effect (never during render)
   const sectionsRef = useRef<LOISection[]>(loi?.sections ?? []);
-  const [localSections, rawSetLocalSections] = useState<LOISection[]>(loi?.sections ?? []);
-
-  function updateSections(updater: (prev: LOISection[]) => LOISection[]) {
-    rawSetLocalSections((prev) => {
-      const next = updater(prev);
-      sectionsRef.current = next;
-      return next;
-    });
-  }
-
-  function replaceSections(sections: LOISection[]) {
-    sectionsRef.current = sections;
-    rawSetLocalSections(sections);
-  }
+  useEffect(() => {
+    sectionsRef.current = localSections;
+  }, [localSections]);
 
   const sectionPatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sync loiState prop → local state (e.g. after poll refresh)
-  useEffect(() => {
+  // Sync loiState prop → local state (render adjustment, not an effect —
+  // see react.dev "adjusting state when a prop changes")
+  const [prevLoiStateProp, setPrevLoiStateProp] = useState<LOIState>(loiState);
+  if (loiState !== prevLoiStateProp) {
+    setPrevLoiStateProp(loiState);
     setLocalLoiState(loiState);
-  }, [loiState]);
+  }
 
-  // Sync loi data when it loads into the store
-  useEffect(() => {
+  // Sync loi data when it loads into the store (render adjustment)
+  const [prevLoi, setPrevLoi] = useState<DealLOI | null>(loi);
+  if (loi !== prevLoi) {
+    setPrevLoi(loi);
     if (loi) {
       setLocalTerms(loi.terms);
       setOriginalTerms(loi.terms);
-      replaceSections(loi.sections);
+      setLocalSections(loi.sections);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loi]);
+  }
 
   // Fetch LOI from API if deal state says it exists but store doesn't have it yet
   useEffect(() => {
@@ -108,18 +103,18 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
     };
   }, [dealId, setLOIVersions, setActiveLoiVersionId]);
 
-  // Load the active version's content into the editor when it changes
-  useEffect(() => {
-    const version = useDealStore
-      .getState()
-      .loiVersions.find((v) => v.id === activeLoiVersionId);
-    if (version) {
-      setLocalTerms(version.terms);
-      setOriginalTerms(version.terms);
-      replaceSections(version.sections);
+  // Load the active version's content into the editor when the active id
+  // changes (render adjustment keyed on id — refetches don't clobber edits)
+  const activeVersion = loiVersions.find((v) => v.id === activeLoiVersionId) ?? null;
+  const [prevActiveVersionId, setPrevActiveVersionId] = useState<string | null>(null);
+  if ((activeVersion?.id ?? null) !== prevActiveVersionId) {
+    setPrevActiveVersionId(activeVersion?.id ?? null);
+    if (activeVersion) {
+      setLocalTerms(activeVersion.terms);
+      setOriginalTerms(activeVersion.terms);
+      setLocalSections(activeVersion.sections);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeLoiVersionId, loiVersions]);
+  }
 
   // Section/term PATCHes target the active version when one exists
   const getLoiPatchUrl = useCallback(() => {
@@ -161,7 +156,7 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
   // Section change from LOIDocument — debounced PATCH
   const handleSectionChange = useCallback(
     (sectionId: string, content: string) => {
-      updateSections((prev) =>
+      setLocalSections((prev) =>
         prev.map((s) => (s.id === sectionId ? { ...s, content } : s))
       );
       if (sectionPatchTimer.current) clearTimeout(sectionPatchTimer.current);
@@ -173,7 +168,7 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
         });
       }, 1000);
     },
-    // updateSections and sectionsRef are stable (ref + functional setter)
+    // setLocalSections (functional) and getLoiPatchUrl are stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dealId, getLoiPatchUrl]
   );
@@ -336,7 +331,7 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
                 key={v.id}
                 onClick={() => {
                   if (v.id !== activeLoiVersionId) {
-                    prevVersionIdRef.current = activeLoiVersionId;
+                    setCompareBaseId(activeLoiVersionId);
                   }
                   setActiveLoiVersionId(v.id);
                 }}
@@ -373,8 +368,9 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
         <LOIToolbar
           loiState={localLoiState}
           sentAt={activeDeal?.loi_sent_at ?? null}
+          dealName={dealName}
+          sections={localSections}
           onCopy={handleCopy}
-          onDownloadPDF={() => {}}
           onSend={() => setShowSendModal(true)}
           onRevise={handleRevise}
           requiredTermsMissing={requiredTermsMissing}
@@ -434,7 +430,7 @@ export function LOIBuilder({ dealId, dealName, loiState, loi }: LOIBuilderProps)
         const activeIdx = loiVersions.findIndex((v) => v.id === right.id);
         const left =
           loiVersions.find(
-            (v) => v.id === prevVersionIdRef.current && v.id !== right.id
+            (v) => v.id === compareBaseId && v.id !== right.id
           ) ??
           loiVersions[activeIdx - 1] ??
           loiVersions.find((v) => v.id !== right.id);

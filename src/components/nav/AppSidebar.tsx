@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -108,15 +108,15 @@ function SubLink({ href, label }: { href: string; label: string }) {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
+  // Lazy initializer: reads localStorage once at mount (SSR-safe guard)
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
     try {
-      setCollapsed(localStorage.getItem(STORAGE_KEY) === "collapsed");
+      return localStorage.getItem(STORAGE_KEY) === "collapsed";
     } catch {
-      // storage blocked
+      return false;
     }
-  }, []);
+  });
 
   // Auth pages render without app chrome
   if (pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) {
@@ -132,11 +132,6 @@ export function AppSidebar() {
       // storage blocked
     }
   }
-
-  const opportunitiesActive = isActive(pathname, "/opportunities");
-  const portfolioActive = isActive(pathname, "/portfolio");
-  const crmActive = isActive(pathname, "/crm");
-  const buyersActive = isActive(pathname, "/buyers");
 
   return (
     <Tooltip.Provider delayDuration={300}>

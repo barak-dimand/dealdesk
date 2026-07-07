@@ -2,13 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useDealStore } from "@/store/dealStore";
-import { Brand } from "@/components/ui/Brand";
 import { cn } from "@/lib/utils";
 import { Send } from "lucide-react";
 import { ProposalCard } from "./ProposalCard";
 import { useApplyProposal } from "@/hooks/useApplyProposal";
 import { parseActionBlock } from "@/lib/parseActionBlock";
 import type { DealMessage, ChatProposal } from "@/types";
+
+// Module scope: the React Compiler flags impure calls (Date.now) inside components
+function buildMessage(
+  prefix: string,
+  dealId: string,
+  role: "user" | "assistant",
+  content: string
+): DealMessage {
+  return {
+    id: `${prefix}-${Date.now()}`,
+    deal_id: dealId,
+    role,
+    content,
+    created_at: new Date().toISOString(),
+  };
+}
 
 const SUGGESTED_PROMPTS = [
   "What is the real NOI based on the documents?",
@@ -99,13 +114,7 @@ export function AIChat() {
 
     setInput("");
 
-    const userMsg: DealMessage = {
-      id: `user-${Date.now()}`,
-      deal_id: activeDeal.id,
-      role: "user",
-      content,
-      created_at: new Date().toISOString(),
-    };
+    const userMsg = buildMessage("user", activeDeal.id, "user", content);
     addMessage(userMsg);
     setIsChatStreaming(true);
     setIsGenerating(true);
@@ -160,25 +169,20 @@ export function AIChat() {
 
       const { message: cleanText } = parseActionBlock(full);
       const aiMsg: DealMessage = {
-        id: `ai-${Date.now()}`,
-        deal_id: activeDeal.id,
-        role: "assistant",
-        content: cleanText || "I processed your request.",
-        created_at: new Date().toISOString(),
+        ...buildMessage("ai", activeDeal.id, "assistant", cleanText || "I processed your request."),
         proposal: receivedProposal ?? undefined,
       };
       addMessage(aiMsg);
       if (receivedProposal) addProposal(receivedProposal);
     } catch {
-      const errMsg: DealMessage = {
-        id: `ai-err-${Date.now()}`,
-        deal_id: activeDeal.id,
-        role: "assistant",
-        content:
-          "Sorry, I couldn't process that. Make sure your Anthropic API key is configured.",
-        created_at: new Date().toISOString(),
-      };
-      addMessage(errMsg);
+      addMessage(
+        buildMessage(
+          "ai-err",
+          activeDeal.id,
+          "assistant",
+          "Sorry, I couldn't process that. Make sure your Anthropic API key is configured."
+        )
+      );
     } finally {
       setIsChatStreaming(false);
       setIsGenerating(false);
@@ -242,9 +246,13 @@ export function AIChat() {
         )}
 
         {messages.map((msg) => {
-          const liveProposal = msg.proposal
-            ? proposals.find((p) => p.id === msg.proposal!.id) ?? msg.proposal
-            : null;
+          // Rehydrated proposals match by DB message id; live-session
+          // proposals are attached directly to the message object
+          const liveProposal =
+            proposals.find((p) => p.messageId === msg.id) ??
+            (msg.proposal
+              ? proposals.find((p) => p.id === msg.proposal!.id) ?? msg.proposal
+              : null);
           return (
             <div key={msg.id} className="flex flex-col gap-2">
               <Message msg={msg} />

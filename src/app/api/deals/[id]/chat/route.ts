@@ -21,7 +21,7 @@ export async function POST(
   const supabase = await createAdminClient();
 
   // Gather deal context
-  const [dealResult, docsResult, incomeResult, expenseResult, unitsResult, offersResult, historyResult] =
+  const [dealResult, docsResult, incomeResult, unitsResult, offersResult, historyResult] =
     await Promise.all([
       supabase.from("deals").select("*").eq("id", dealId).single(),
       supabase
@@ -34,10 +34,6 @@ export async function POST(
         .select("field_key, field_label, field_value, field_value_numeric, category, ai_note")
         .eq("deal_id", dealId)
         .in("category", ["income", "expense", "summary"]),
-      supabase
-        .from("deal_units")
-        .select("id, unit_number, unit_type, current_rent, market_rent, status, tenant_notes")
-        .eq("deal_id", dealId),
       supabase
         .from("deal_units")
         .select("id, unit_number, unit_type, current_rent, market_rent, status")
@@ -73,7 +69,6 @@ export async function POST(
   // Build system context
   const docs = docsResult.data ?? [];
   const fields = incomeResult.data ?? [];
-  const units = unitsResult.data ?? [];
   const offers = offersResult.data ?? [];
   const history = historyResult.data ?? [];
 
@@ -375,4 +370,47 @@ export async function PATCH(
 
   if (error) return new Response(error.message, { status: 500 });
   return Response.json({ success: true });
+}
+
+// GET — chat history plus proposals still awaiting user review, so
+// ProposalCards survive a page reload
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: dealId } = await params;
+  const { userId } = await auth();
+  if (!userId) return new Response("Unauthorized", { status: 401 });
+
+  const supabase = await createAdminClient();
+  const [messagesResult, proposalsResult] = await Promise.all([
+    supabase
+      .from("deal_messages")
+      .select("*")
+      .eq("deal_id", dealId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("deal_chat_proposals")
+      .select("*")
+      .eq("deal_id", dealId)
+      .in("status", ["pending", "partially_applied"])
+      .order("created_at", { ascending: true }),
+  ]);
+
+  const pendingProposals: ChatProposal[] = (proposalsResult.data ?? []).map(
+    (row) => ({
+      id: row.id,
+      messageId: row.message_id,
+      dealId,
+      changes: row.changes ?? [],
+      status: row.status,
+      appliedChangeIds: row.applied_change_ids ?? [],
+      createdAt: row.created_at,
+    })
+  );
+
+  return Response.json({
+    messages: messagesResult.data ?? [],
+    pendingProposals,
+  });
 }

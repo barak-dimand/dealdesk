@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DealHeader } from "@/components/deals/DealHeader";
 import { DealView } from "@/components/deals/DealView";
-import { NewDealModal } from "@/components/deals/NewDealModal";
 import { useDealStore } from "@/store/dealStore";
 
 export default function DealPage() {
@@ -22,12 +21,11 @@ export default function DealPage() {
     setRecommendation,
     setIsGeneratingRec,
     setLOI,
+    setProposals,
     setIsLoadingDeals,
     setIsLoadingDeal,
     documents,
   } = useDealStore();
-
-  const [showNewDeal, setShowNewDeal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -40,6 +38,7 @@ export default function DealPage() {
       setOfferStructures([]);
       setRecommendation(null);
       setLOI(null);
+      setProposals([]);
 
       try {
         const [dealsRes, res] = await Promise.all([
@@ -66,6 +65,17 @@ export default function DealPage() {
         setOfferStructures(data.offerStructures ?? []);
         setRecommendation(data.recommendation ?? null);
 
+        // Rehydrate proposals still awaiting review so ProposalCards
+        // survive page reloads
+        fetch(`/api/deals/${id}/chat`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((chatData) => {
+            if (chatData?.pendingProposals) {
+              setProposals(chatData.pendingProposals);
+            }
+          })
+          .catch(() => {});
+
         // Auto-generate recommendation if deal has data but no existing recommendation
         const hasData = (data.dataFields ?? []).length > 0;
         const hasRec = !!(data.recommendation?.tier) && Array.isArray(data.recommendation?.scenarios) && data.recommendation.scenarios.length > 0;
@@ -83,6 +93,8 @@ export default function DealPage() {
       }
     }
     load();
+    // Zustand setters and router are stable references
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Poll for parse completion while any document is pending/parsing
@@ -111,15 +123,14 @@ export default function DealPage() {
     }, 3000);
 
     return () => clearTimeout(timer);
+    // Zustand setters are stable references
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, parsingDocKey]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#f6f5f1]">
       <DealHeader />
       <DealView />
-      {showNewDeal && (
-        <NewDealModal onClose={() => setShowNewDeal(false)} />
-      )}
     </div>
   );
 }

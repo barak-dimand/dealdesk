@@ -45,7 +45,25 @@ export function DealView() {
     setChatWidth,
     activeDeal,
     loi,
+    messages,
+    proposals,
   } = useDealStore();
+
+  // Single source of truth for which center panel shows — eliminates the
+  // hand-maintained mobileTab exclusion lists (see CLAUDE.md "mobileTab leak")
+  function isTabVisible(tab: CenterTab): boolean {
+    if (typeof window !== "undefined" && window.innerWidth < 760) {
+      return mobileTab === tab;
+    }
+    return centerTab === tab;
+  }
+
+  const pendingChangeCount = proposals
+    .filter((p) => p.status === "pending" || p.status === "partially_applied")
+    .reduce(
+      (sum, p) => sum + p.changes.filter((c) => !p.appliedChangeIds.includes(c.id)).length,
+      0
+    );
 
   const resizeRef = useRef<{ startX: number; startW: number } | null>(null);
 
@@ -118,9 +136,14 @@ export function DealView() {
               </button>
             ))}
             <div className="flex-1" />
-            <span className="text-[11px] text-[#9b978f] pr-1.5">
-              ● Synced with chat
-            </span>
+            {pendingChangeCount > 0 ? (
+              <span className="text-[11px] text-[#9a6b3f] pr-1.5">
+                ● {pendingChangeCount} pending{" "}
+                {pendingChangeCount === 1 ? "change" : "changes"}
+              </span>
+            ) : messages.length > 0 ? (
+              <span className="text-[11px] text-[#2f6d4f] pr-1.5">● Live</span>
+            ) : null}
           </div>
         )}
 
@@ -129,19 +152,7 @@ export function DealView() {
           {/* Sheet */}
           <div
             className="h-full p-3"
-            style={{
-              display:
-                (centerTab === "sheet" || mobileTab === "sheet") &&
-                centerTab !== "loi" &&
-                centerTab !== "rec" &&
-                centerTab !== "notes" &&
-                centerTab !== "files" &&
-                mobileTab !== "loi" &&
-                mobileTab !== "notes" &&
-                mobileTab !== "files"
-                  ? "flex"
-                  : "none",
-            }}
+            style={{ display: isTabVisible("sheet") ? "flex" : "none" }}
           >
             <SpreadsheetView />
           </div>
@@ -149,7 +160,7 @@ export function DealView() {
           {/* LOI Builder */}
           <div
             style={{
-              display: (centerTab === "loi" || mobileTab === "loi") ? "flex" : "none",
+              display: isTabVisible("loi") ? "flex" : "none",
               height: "100%",
               flexDirection: "column",
             }}
@@ -168,7 +179,7 @@ export function DealView() {
           {showRecommendationInCenter && (
             <div
               style={{
-                display: centerTab === "rec" ? "flex" : "none",
+                display: isTabVisible("rec") ? "flex" : "none",
                 height: "100%",
                 flexDirection: "column",
               }}
@@ -180,10 +191,7 @@ export function DealView() {
           {/* Files */}
           <div
             style={{
-              display:
-                centerTab === "files" || mobileTab === "files"
-                  ? "block"
-                  : "none",
+              display: isTabVisible("files") ? "block" : "none",
               height: "100%",
               overflow: "auto",
             }}
@@ -194,10 +202,7 @@ export function DealView() {
           {/* Notes */}
           <div
             style={{
-              display:
-                centerTab === "notes" || mobileTab === "notes"
-                  ? "flex"
-                  : "none",
+              display: isTabVisible("notes") ? "flex" : "none",
               height: "100%",
               flexDirection: "column",
             }}

@@ -67,6 +67,7 @@ interface DealState {
   setRecommendation: (rec: DealRecommendation | null) => void;
   setLOI: (loi: DealLOI | null) => void;
   addProposal: (proposal: ChatProposal) => void;
+  setProposals: (proposals: ChatProposal[]) => void;
   updateProposal: (id: string, updates: Partial<ChatProposal>) => void;
   setLOIVersions: (versions: LOIVersion[]) => void;
   setActiveLoiVersionId: (id: string | null) => void;
@@ -142,6 +143,7 @@ export const useDealStore = create<DealState>((set) => ({
   setLOI: (loi) => set({ loi }),
   addProposal: (proposal) =>
     set((state) => ({ proposals: [...state.proposals, proposal] })),
+  setProposals: (proposals) => set({ proposals }),
   updateProposal: (id, updates) =>
     set((state) => ({
       proposals: state.proposals.map((p) =>
