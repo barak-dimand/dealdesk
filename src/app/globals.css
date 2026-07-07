@@ -86,6 +86,12 @@ body {
   40% { opacity: 1; }
 }
 
+/* Inline "generating response..." dot */
+@keyframes pulseDot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
 /* Tiptap editor */
 .tiptap-editor {
   outline: none;

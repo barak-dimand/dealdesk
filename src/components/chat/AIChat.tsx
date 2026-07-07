@@ -83,6 +83,7 @@ export function AIChat() {
   const [input, setInput] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [hasStartedStreaming, setHasStartedStreaming] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -108,6 +109,7 @@ export function AIChat() {
     addMessage(userMsg);
     setIsChatStreaming(true);
     setIsGenerating(true);
+    setHasStartedStreaming(false);
     setStreamingContent("");
 
     try {
@@ -144,12 +146,12 @@ export function AIChat() {
               }
               const delta = parsed.delta?.text ?? parsed.choices?.[0]?.delta?.content ?? "";
               full += delta;
-              if (full.length > 0) setIsGenerating(false);
+              if (full.length > 0) setHasStartedStreaming(true);
               // Hide the machine-readable <action> block while streaming
               setStreamingContent(full.split("<action>")[0]);
             } catch {
               full += data;
-              if (full.length > 0) setIsGenerating(false);
+              if (full.length > 0) setHasStartedStreaming(true);
               setStreamingContent(full.split("<action>")[0]);
             }
           }
@@ -180,6 +182,7 @@ export function AIChat() {
     } finally {
       setIsChatStreaming(false);
       setIsGenerating(false);
+      setHasStartedStreaming(false);
       setStreamingContent("");
     }
   }
@@ -258,17 +261,28 @@ export function AIChat() {
           );
         })}
 
-        {isGenerating ? (
-          <TypingIndicator />
-        ) : isChatStreaming && streamingContent ? (
-          <div className="flex gap-2 items-end">
-            <div className="w-6 h-6 rounded-[6px] bg-[#2f5d50] flex items-center justify-center flex-shrink-0">
-              <div className="w-[8px] h-[8px] bg-white rotate-45 rounded-[1px]" />
+        {isGenerating && !hasStartedStreaming && <TypingIndicator />}
+
+        {isChatStreaming && streamingContent ? (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex gap-2 items-end">
+              <div className="w-6 h-6 rounded-[6px] bg-[#2f5d50] flex items-center justify-center flex-shrink-0">
+                <div className="w-[8px] h-[8px] bg-white rotate-45 rounded-[1px]" />
+              </div>
+              <div className="max-w-[85%] bg-[#f3f1ea] text-[#23211d] px-3 py-[10px] text-[13px] leading-[1.55] whitespace-pre-wrap rounded-[13px_13px_13px_4px]">
+                {streamingContent}
+                <span className="inline-block w-[2px] h-[14px] bg-[#9b978f] ml-0.5 animate-pulse align-middle" />
+              </div>
             </div>
-            <div className="max-w-[85%] bg-[#f3f1ea] text-[#23211d] px-3 py-[10px] text-[13px] leading-[1.55] whitespace-pre-wrap rounded-[13px_13px_13px_4px]">
-              {streamingContent}
-              <span className="inline-block w-[2px] h-[14px] bg-[#9b978f] ml-0.5 animate-pulse align-middle" />
-            </div>
+            {isGenerating && hasStartedStreaming && (
+              <div className="ml-8 flex items-center gap-1.5 text-[11px] text-[#9b978f]">
+                <span
+                  className="w-[5px] h-[5px] rounded-full bg-[#9b978f] flex-shrink-0"
+                  style={{ animation: "pulseDot 1s ease-in-out infinite" }}
+                />
+                generating response...
+              </div>
+            )}
           </div>
         ) : null}
       </div>

@@ -158,6 +158,10 @@ The <action> block is parsed by the app — do not explain it to the user.
 When the user asks about the deal, answer conversationally without an action block.
 Only include action blocks when the user is asking you to make or propose a change.
 
+Do not write "Drafting now:", "Generating...", "Working on it...", or any similar
+meta-commentary. Start your response directly with the actual content or analysis.
+The app handles loading states visually.
+
 CURRENT DEAL: ${deal.name}
 Type: ${deal.deal_type}
 Status: ${deal.status}
