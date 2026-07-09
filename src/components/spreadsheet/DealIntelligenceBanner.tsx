@@ -3,7 +3,7 @@
 import { useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useDealStore } from "@/store/dealStore";
-import { formatCentsFull } from "@/lib/utils";
+import { cn, formatCentsFull } from "@/lib/utils";
 import { ChevronDown, ChevronUp, TrendingUp, AlertTriangle, ListChecks } from "lucide-react";
 import { ParseReviewModal } from "@/components/files/ParseReviewModal";
 import type { DealDocument } from "@/types";
@@ -77,37 +77,28 @@ function Card({
   );
 }
 
-export function DealIntelligenceBanner() {
+export type BannerMode = "collapsed" | "peek" | "expanded";
+
+interface DealIntelligenceBannerProps {
+  /** Controlled by the resizable split in SpreadsheetView */
+  bannerMode?: BannerMode;
+  /** Chevron click — parent animates the pane height */
+  onToggle?: () => void;
+}
+
+export function DealIntelligenceBanner({
+  bannerMode = "expanded",
+  onToggle,
+}: DealIntelligenceBannerProps) {
   const { activeDeal, units, dataFields, documents, recommendation, setCenterTab } =
     useDealStore();
-  const dealId = activeDeal?.id ?? null;
-  const storageKey = dealId ? `dealdesk_intel_collapsed_${dealId}` : null;
-
-  // Lazy initializer — parent remounts this component per deal via key={deal.id}
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined" || !storageKey) return false;
-    try {
-      return localStorage.getItem(storageKey) === "1";
-    } catch {
-      return false;
-    }
-  });
   const [reviewDoc, setReviewDoc] = useState<DealDocument | null>(null);
 
   const parsedDocs = documents.filter((d) => d.status === "parsed");
   if (!activeDeal || parsedDocs.length === 0) return null;
 
-  function toggleCollapsed() {
-    const next = !collapsed;
-    setCollapsed(next);
-    if (storageKey) {
-      try {
-        localStorage.setItem(storageKey, next ? "1" : "0");
-      } catch {
-        // storage blocked
-      }
-    }
-  }
+  const collapsed = bannerMode === "collapsed";
+  const peek = bannerMode === "peek";
 
   // ── Card 1: Value Add Opportunities ──
   const opportunities: string[] = [];
@@ -224,10 +215,15 @@ export function DealIntelligenceBanner() {
     onClick: () => setReviewDoc(latestParsed),
   });
 
+  // Peek mode shows only each card's title + first item
+  const visibleOpportunities = peek ? opportunities.slice(0, 1) : opportunities;
+  const visibleRisks = peek ? risks.slice(0, 1) : risks;
+  const visibleSteps = peek ? steps.slice(0, 1) : steps;
+
   return (
-    <div className="flex-shrink-0 border-b border-[#eae6dd] bg-[#faf8f3] px-3.5 py-3">
+    <div className="h-full flex flex-col border-b border-[#eae6dd] bg-[#faf8f3] px-3.5 py-3 overflow-hidden">
       {/* Header row */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <span className="text-[12px] font-bold text-[#23211d]">Deal Intelligence</span>
         {collapsed && (
           <span className="text-[11.5px] text-[#6b6862]">
@@ -237,7 +233,7 @@ export function DealIntelligenceBanner() {
         )}
         <div className="flex-1" />
         <button
-          onClick={toggleCollapsed}
+          onClick={onToggle}
           aria-label={collapsed ? "Expand intelligence banner" : "Collapse intelligence banner"}
           className="w-6 h-6 flex items-center justify-center rounded-[6px] text-[#9b978f] hover:bg-[#f4f2eb] hover:text-[#23211d] transition-colors cursor-pointer"
         >
@@ -247,19 +243,24 @@ export function DealIntelligenceBanner() {
 
       {/* Cards */}
       {!collapsed && (
-        <div className="flex flex-col md:flex-row gap-3 mt-2.5">
+        <div
+          className={cn(
+            "flex flex-col md:flex-row gap-3 mt-2.5 flex-1 min-h-0",
+            peek ? "overflow-hidden" : "overflow-y-auto"
+          )}
+        >
           <Card
             title="Value Add Opportunities"
             icon={<TrendingUp size={13} className="text-[#2f6d4f]" />}
             borderColor="#2f6d4f"
           >
-            {opportunities.length === 0 ? (
+            {visibleOpportunities.length === 0 ? (
               <p className="text-[12px] text-[#b3aea3] italic">
                 No value-add opportunities detected yet.
               </p>
             ) : (
-              <ul className="flex flex-col gap-1.5">
-                {opportunities.map((o, i) => (
+              <ul className="flex flex-col gap-1.5 overflow-hidden">
+                {visibleOpportunities.map((o, i) => (
                   <li key={i} className="text-[12px] text-[#3a3833] leading-[1.5]">
                     · {o}
                   </li>
@@ -273,12 +274,12 @@ export function DealIntelligenceBanner() {
             icon={<AlertTriangle size={13} className="text-[#a8473a]" />}
             borderColor="#a8473a"
           >
-            {risks.length === 0 ? (
+            {visibleRisks.length === 0 ? (
               <p className="text-[12px] text-[#b3aea3] italic">No risk flags detected.</p>
             ) : (
               <Tooltip.Provider delayDuration={300}>
-                <ul className="flex flex-col gap-1.5">
-                  {risks.map((r, i) => (
+                <ul className="flex flex-col gap-1.5 overflow-hidden">
+                  {visibleRisks.map((r, i) => (
                     <RiskItem key={i} text={r} />
                   ))}
                 </ul>
@@ -291,8 +292,8 @@ export function DealIntelligenceBanner() {
             icon={<ListChecks size={13} className="text-[#2f5d50]" />}
             borderColor="#2f5d50"
           >
-            <ul className="flex flex-col gap-1.5">
-              {steps.map((step, i) => (
+            <ul className="flex flex-col gap-1.5 overflow-hidden">
+              {visibleSteps.map((step, i) => (
                 <li key={i} className="text-[12px] leading-[1.5]">
                   {step.onClick ? (
                     <button
@@ -304,7 +305,7 @@ export function DealIntelligenceBanner() {
                   ) : (
                     <span className="text-[#3a3833]">{step.label}</span>
                   )}
-                  {step.sublist && (
+                  {!peek && step.sublist && (
                     <ul className="mt-1 ml-3 flex flex-col gap-0.5">
                       {step.sublist.map((item, j) => (
                         <li key={j} className="text-[11px] text-[#6b6862]">

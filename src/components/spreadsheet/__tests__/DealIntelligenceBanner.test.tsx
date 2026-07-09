@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { DealIntelligenceBanner } from "../DealIntelligenceBanner";
 import { useDealStore } from "@/store/dealStore";
@@ -84,18 +84,37 @@ describe("DealIntelligenceBanner", () => {
     expect(screen.getByText(/T-12 trailing twelve months P&L/)).toBeInTheDocument();
   });
 
-  it("collapses and expands correctly", () => {
-    render(<DealIntelligenceBanner />);
+  it("collapses and expands via the controlled bannerMode prop", () => {
+    // Expanded (default): full cards, chevron labelled for collapsing
+    const onToggle = vi.fn();
+    const { rerender } = render(
+      <DealIntelligenceBanner bannerMode="expanded" onToggle={onToggle} />
+    );
     expect(screen.getByText("Value Add Opportunities")).toBeInTheDocument();
 
+    // Chevron delegates to the parent (which animates the pane height)
     fireEvent.click(screen.getByLabelText("Collapse intelligence banner"));
-    expect(screen.queryByText("Value Add Opportunities")).not.toBeInTheDocument();
-    expect(screen.getByText(/opportunities · \d+ risks · \d+ next steps/)).toBeInTheDocument();
-    // Collapsed state persisted per deal
-    expect(localStorage.getItem("dealdesk_intel_collapsed_test-deal-calvert")).toBe("1");
+    expect(onToggle).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByLabelText("Expand intelligence banner"));
+    // Collapsed: single summary line, no cards
+    rerender(<DealIntelligenceBanner bannerMode="collapsed" onToggle={onToggle} />);
+    expect(screen.queryByText("Value Add Opportunities")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/opportunities · \d+ risks · \d+ next steps/)
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Expand intelligence banner")).toBeInTheDocument();
+  });
+
+  it("peek mode shows card titles with only the first item each", () => {
+    render(<DealIntelligenceBanner bannerMode="peek" />);
+    // Titles all present
     expect(screen.getByText("Value Add Opportunities")).toBeInTheDocument();
-    expect(localStorage.getItem("dealdesk_intel_collapsed_test-deal-calvert")).toBe("0");
+    expect(screen.getByText("Risk Flags")).toBeInTheDocument();
+    expect(screen.getByText("Next Steps")).toBeInTheDocument();
+    // First opportunity visible, later ones hidden
+    expect(screen.getByText(/Rent upside available/)).toBeInTheDocument();
+    expect(screen.queryByText(/lease renewal opportunity/)).not.toBeInTheDocument();
+    // Sublists hidden in peek
+    expect(screen.queryByText(/T-12 trailing twelve months/)).not.toBeInTheDocument();
   });
 });
