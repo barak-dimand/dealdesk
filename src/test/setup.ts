@@ -13,3 +13,13 @@ vi.mock("@clerk/nextjs", () => ({
   useUser: () => ({ user: { id: "test-user-id" } }),
   useAuth: () => ({ userId: "test-user-id" }),
 }));
+
+// jsdom lacks ResizeObserver — @tanstack/react-virtual needs it to exist
+// (the stub never fires, so the virtualizer keeps its initialRect)
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

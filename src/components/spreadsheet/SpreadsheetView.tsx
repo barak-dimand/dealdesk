@@ -9,15 +9,9 @@ import { ExpensesTab } from "./ExpensesTab";
 import { SummaryTab } from "./SummaryTab";
 import { EditDealModal } from "@/components/deals/EditDealModal";
 import { DealIntelligenceBanner, type BannerMode } from "./DealIntelligenceBanner";
-import type { SheetTab, Deal } from "@/types";
+import { SheetToolbar } from "./core/SheetToolbar";
+import type { Deal } from "@/types";
 import { CheckCircle2, Loader2, Pencil } from "lucide-react";
-
-const TABS: { key: SheetTab; label: string }[] = [
-  { key: "rentroll", label: "Rent Roll" },
-  { key: "income", label: "Income" },
-  { key: "expenses", label: "Expenses" },
-  { key: "summary", label: "Summary" },
-];
 
 const MIN_BANNER = 80;
 const MAX_BANNER = 480;
@@ -43,7 +37,7 @@ export function SpreadsheetView() {
 }
 
 function SpreadsheetBody({ deal }: { deal: Deal }) {
-  const { sheetTab, setSheetTab, documents } = useDealStore();
+  const { sheetTab, documents } = useDealStore();
   const [editingDeal, setEditingDeal] = useState(false);
 
   const parsedCount = documents.filter((d) => d.status === "parsed").length;
@@ -214,38 +208,16 @@ function SpreadsheetBody({ deal }: { deal: Deal }) {
         </>
       )}
 
-      {/* Sheet content — fills all remaining space */}
+      {/* Sheet toolbar + grid — fills all remaining space */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto"
+        className="flex-1 min-h-0 flex flex-col overflow-hidden"
         style={isDragging ? { borderTop: "1px solid #2f5d50" } : undefined}
       >
+        <SheetToolbar />
         {sheetTab === "rentroll" && <RentRollTab />}
         {sheetTab === "income" && <IncomeTab />}
         {sheetTab === "expenses" && <ExpensesTab />}
         {sheetTab === "summary" && <SummaryTab />}
-      </div>
-
-      {/* Sheet tab bar */}
-      <div className="flex-shrink-0 flex items-center gap-1 px-3 pt-[5px] pb-0 bg-[#f3f1ea] border-t border-[#e6e3dc] overflow-x-auto">
-        {TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setSheetTab(key)}
-            className={cn(
-              "px-3.5 py-[6px] text-[12.5px] font-medium rounded-t-[8px] whitespace-nowrap cursor-pointer transition-colors border border-b-0",
-              sheetTab === key
-                ? "bg-white text-[#2f5d50] font-semibold border-[#e6e3dc]"
-                : "bg-transparent text-[#6b6862] border-transparent hover:text-[#23211d]"
-            )}
-            style={sheetTab === key ? { marginBottom: "-1px" } : {}}
-          >
-            {label}
-          </button>
-        ))}
-        <div className="flex-1" />
-        <span className="text-[11px] text-[#9b978f] px-1.5 pb-1.5 whitespace-nowrap">
-          {parsedCount} of {totalCount} docs parsed
-        </span>
       </div>
     </div>
     </>
