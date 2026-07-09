@@ -45,8 +45,11 @@ Display rules:
 - All monetary values stored as **cents** (bigint in DB, `number` in TS)
 - Use `formatCentsFull()` for display; never trust LLM arithmetic for financial metrics
 
-## Key state: `mobileTab` desktop leak
-`mobileTab` defaults to `"sheet"` in Zustand and never changes on desktop. Any center panel visibility condition using `mobileTab === "sheet"` will always be true on desktop. Always add explicit `&& centerTab !== "X"` exclusions for every non-sheet center tab.
+## Tab visibility
+Center panel visibility goes through the single `isTabVisible(tab)` helper in `DealView.tsx` (mobile → `mobileTab`, desktop → `centerTab`). Never write raw `centerTab`/`mobileTab` display conditions — the old hand-maintained exclusion lists caused repeated tab-bleed bugs.
+
+## Resizable Deal Intelligence banner
+The banner/table split in `SpreadsheetView.tsx` is a draggable vertical split. Height persists to localStorage `dealdesk_banner_height_[dealId]` (per deal; `SpreadsheetBody` is keyed on deal id so the lazy initializer re-hydrates). `bannerMode` derives from height: ≤80 `collapsed`, <200 `peek` (card titles + first item only), ≥200 `expanded`. `DealIntelligenceBanner` is a controlled component — it takes `bannerMode` + `onToggle` props and owns no collapse state; the chevron and the drag handle both set the same pane height.
 
 ## Parsing Architecture
 

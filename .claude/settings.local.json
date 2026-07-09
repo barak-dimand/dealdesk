@@ -4,7 +4,11 @@
       "Bash(npx tsc *)",
       "Bash(xargs ls *)",
       "mcp__supabase__list_projects",
-      "mcp__supabase__execute_sql"
+      "mcp__supabase__execute_sql",
+      "WebFetch(domain:registry.modelcontextprotocol.io)",
+      "Bash(perl -0pi -e 's{import \\\\{ useState, useEffect \\\\} from \"react\";}{import { useState } from \"react\";}; s{  const opportunitiesActive = isActive\\\\\\(pathname, \"/opportunities\"\\\\\\);\\\\n  const portfolioActive = isActive\\\\\\(pathname, \"/portfolio\"\\\\\\);\\\\n  const crmActive = isActive\\\\\\(pathname, \"/crm\"\\\\\\);\\\\n  const buyersActive = isActive\\\\\\(pathname, \"/buyers\"\\\\\\);\\\\n\\\\n}{}' src/components/nav/AppSidebar.tsx)",
+      "Bash(perl -pi -e 's{    \\\\} catch \\\\\\(e\\\\\\) \\\\{}{    } catch {}' src/components/deals/NewDealModal.tsx)",
+      "Bash(perl -0pi -e 's{const fn = vi\\\\.fn\\\\\\(\\\\\\(url: string, _init\\\\?: RequestInit\\\\\\) => \\\\{}{const fn = vi.fn\\(\\(...args: [url: string, init?: RequestInit]\\) => {\\\\n    const [url] = args;}' src/hooks/__tests__/useApplyProposal.test.ts)"
     ]
   },
   "enableAllProjectMcpServers": true,
