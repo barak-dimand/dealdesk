@@ -30,7 +30,8 @@ export interface MetricUnitInput {
 }
 
 export interface MetricDealInput {
-  asking_price?: number | null; // cents
+  asking_price?: number | null; // cents (live schema)
+  ask_price?: number | null; // cents (legacy/fixture field name)
   unit_count?: number | null;
 }
 
@@ -348,7 +349,13 @@ export function computeMetrics(
     units.length > 0 ? (vacantUnits / units.length) * 100 : null;
 
   // ── income from units (cents → dollars/month) ──
-  const gprCents = units.reduce((s, u) => s + (u.market_rent ?? 0), 0);
+  // GPR: market rent per unit, falling back to current rent when no market
+  // estimate exists (real rent rolls often only carry market rent on vacant
+  // units — summing market_rent alone would massively understate GPR)
+  const gprCents = units.reduce(
+    (s, u) => s + (u.market_rent ?? u.current_rent ?? 0),
+    0
+  );
   const grossPotentialRent = units.length > 0 && gprCents > 0 ? gprCents / 100 : null;
 
   const inPlaceCents = units
@@ -442,8 +449,9 @@ export function computeMetrics(
   const proFormaNOI = get("pro_forma_noi");
 
   // ── valuation ──
+  const dealAskCents = deal.asking_price ?? deal.ask_price ?? null;
   const askingPrice =
-    get("asking_price") ?? (deal.asking_price != null ? deal.asking_price / 100 : null);
+    get("asking_price") ?? (dealAskCents != null ? dealAskCents / 100 : null);
   const pricePerUnit =
     get("price_per_unit") ??
     (askingPrice != null && unitCount > 0 ? askingPrice / unitCount : null);
