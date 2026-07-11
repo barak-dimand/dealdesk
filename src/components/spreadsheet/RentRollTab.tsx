@@ -5,6 +5,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { useDealStore } from "@/store/dealStore";
 import { SpreadsheetEngine } from "./core/SpreadsheetEngine";
 import { formatCents } from "@/lib/utils";
+import { buildProvenance } from "@/lib/provenance";
 import { Chip } from "@/components/ui/Chip";
 import type { DealUnit } from "@/types";
 
@@ -35,7 +36,15 @@ const EDITABLE_FIELDS = new Set([
   "tenant_notes",
 ]);
 
-const columns: ColumnDef<DealUnit, unknown>[] = [
+function buildColumns(docNames: Map<string, string>): ColumnDef<DealUnit, unknown>[] {
+  const unitProv = (u: DealUnit) =>
+    buildProvenance(
+      u,
+      u.source_document_id ? docNames.get(u.source_document_id) ?? null : null
+    );
+  const unitVerify = (u: DealUnit) => ({ kind: "unit" as const, id: u.id });
+
+  return [
   {
     id: "unit_number",
     header: "Unit",
@@ -51,14 +60,14 @@ const columns: ColumnDef<DealUnit, unknown>[] = [
     header: "Type",
     accessorKey: "unit_type",
     size: 90,
-    meta: { type: "text" },
+    meta: { type: "text", getProvenance: unitProv, getVerifyTarget: unitVerify  },
   },
   {
     id: "current_rent",
     header: "In-Place Rent",
     accessorKey: "current_rent",
     size: 120,
-    meta: { type: "currency", align: "right" },
+    meta: { type: "currency", align: "right", getProvenance: unitProv, getVerifyTarget: unitVerify  },
     cell: ({ getValue }) => formatCents(getValue() as number | null) ?? "—",
   },
   {
@@ -66,7 +75,7 @@ const columns: ColumnDef<DealUnit, unknown>[] = [
     header: "Market Rent",
     accessorKey: "market_rent",
     size: 120,
-    meta: { type: "currency", align: "right" },
+    meta: { type: "currency", align: "right", getProvenance: unitProv, getVerifyTarget: unitVerify  },
     cell: ({ getValue }) => formatCents(getValue() as number | null) ?? "—",
   },
   {
@@ -92,7 +101,7 @@ const columns: ColumnDef<DealUnit, unknown>[] = [
     header: "Status",
     accessorKey: "status",
     size: 110,
-    meta: { type: "status" },
+    meta: { type: "status", getProvenance: unitProv, getVerifyTarget: unitVerify  },
     cell: ({ getValue }) => <StatusChip status={String(getValue() ?? "")} />,
   },
   {
@@ -124,11 +133,18 @@ const columns: ColumnDef<DealUnit, unknown>[] = [
     size: 200,
     meta: { type: "text" },
   },
-];
+  ];
+}
 
 export function RentRollTab() {
-  const { activeDeal, units, updateUnit, addUnit, removeUnit } = useDealStore();
+  const { activeDeal, units, documents, updateUnit, addUnit, removeUnit } = useDealStore();
   const dealId = activeDeal?.id ?? "";
+
+  const docNames = useMemo(
+    () => new Map(documents.map((d) => [d.id, d.name])),
+    [documents]
+  );
+  const columns = useMemo(() => buildColumns(docNames), [docNames]);
 
   const totals = useMemo(() => {
     const inPlace = units.reduce((s, u) => s + (u.current_rent ?? 0), 0);
@@ -202,6 +218,10 @@ export function RentRollTab() {
       dealId={dealId}
       tableId="rent-roll"
       dealName={activeDeal?.name}
+      onCellVerified={(rowIndex) => {
+        const unit = units[rowIndex];
+        if (unit) updateUnit(unit.id, { user_verified: true });
+      }}
       groupBy={
         shouldGroup
           ? (u) =>

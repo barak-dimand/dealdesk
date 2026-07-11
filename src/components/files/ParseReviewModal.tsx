@@ -99,7 +99,12 @@ function FieldGroup({ label, fields }: { label: string; fields: DealDataField[] 
             className="flex items-start justify-between gap-2 py-[7px] border-b border-[#f4f2eb] last:border-0"
           >
             <div className="flex flex-col min-w-0">
-              <span className="text-[12.5px] text-[#3a3833]">{f.field_label}</span>
+              <span className="text-[12.5px] text-[#3a3833]">
+                {f.field_label}
+                {f.user_verified && (
+                  <span className="ml-1 text-[10px] font-bold text-[#2f6d4f]">✓</span>
+                )}
+              </span>
               {f.ai_note && (
                 <span className="text-[11px] text-[#9a6b3f] italic leading-[1.4]">
                   {f.ai_note}

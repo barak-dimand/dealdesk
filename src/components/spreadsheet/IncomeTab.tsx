@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useDealStore } from "@/store/dealStore";
 import { SpreadsheetEngine } from "./core/SpreadsheetEngine";
+import { buildProvenance } from "@/lib/provenance";
 import type { DealDataField } from "@/types";
 
 // Module scope so the React Compiler doesn't flag impure calls in components
@@ -19,8 +20,12 @@ function dollars(v: number | null | undefined): string {
 }
 
 export function IncomeTab() {
-  const { activeDeal, dataFields, updateDataField, addDataField, removeDataField } =
+  const { activeDeal, dataFields, documents, updateDataField, addDataField, removeDataField } =
     useDealStore();
+  const docNames = useMemo(
+    () => new Map(documents.map((d) => [d.id, d.name])),
+    [documents]
+  );
   const dealId = activeDeal?.id ?? "";
 
   const rows = useMemo(
@@ -62,7 +67,16 @@ export function IncomeTab() {
         header: "Annual",
         accessorKey: "field_value_numeric",
         size: 120,
-        meta: { type: "number", align: "right" },
+        meta: {
+          type: "number",
+          align: "right",
+          getProvenance: (f) =>
+            buildProvenance(
+              f,
+              f.source_document_id ? docNames.get(f.source_document_id) ?? null : null
+            ),
+          getVerifyTarget: (f) => ({ kind: "field" as const, id: f.id }),
+        },
         cell: ({ getValue }) => dollars(getValue() as number | null),
       },
       {
@@ -83,7 +97,7 @@ export function IncomeTab() {
         meta: { type: "text" },
       },
     ],
-    [goi]
+    [goi, docNames]
   );
 
   async function patchField(fieldId: string, updates: Record<string, unknown>) {
@@ -152,6 +166,10 @@ export function IncomeTab() {
         pct_goi: "100%",
       }}
       dealId={dealId}
+      onCellVerified={(rowIndex) => {
+        const field = rows[rowIndex];
+        if (field) updateDataField(field.id, { user_verified: true });
+      }}
       tableId="income"
       dealName={activeDeal?.name}
       emptyState={

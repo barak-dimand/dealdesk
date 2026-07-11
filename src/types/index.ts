@@ -94,6 +94,38 @@ export interface DealDocument {
   extracted_field_count: number | null;
 }
 
+// ─── Data provenance ───
+
+export type DataSourceType =
+  | "ai_parsed"    // extracted from a document by AI
+  | "ai_inferred"  // AI made a reasonable guess, not explicitly stated
+  | "user_edited"  // manually changed by the user
+  | "calculated";  // derived from other values (read-only)
+
+export interface ValueHistoryEntry {
+  value: string;                     // formatted display value at that time
+  value_numeric: number | null;
+  source_type: DataSourceType;
+  source_document_id: string | null;
+  source_document_name: string | null;
+  changed_at: string;                // ISO timestamp
+  changed_by: string | null;         // 'AI' or user display name
+  note: string | null;               // e.g. "Overridden by new T12 upload"
+}
+
+export interface DataProvenance {
+  source_type: DataSourceType;
+  source_document_id: string | null;
+  source_document_name: string | null;
+  source_document_url: string | null;
+  source_text_snippet: string | null;
+  source_confidence: "high" | "medium" | "low" | null;
+  last_edited_by: string | null;
+  last_edited_at: string | null;
+  value_history: ValueHistoryEntry[];
+  user_verified?: boolean;
+}
+
 export interface DealDataField {
   id: string;
   deal_id: string;
@@ -110,6 +142,15 @@ export interface DealDataField {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  // provenance
+  source_type: DataSourceType;
+  source_document_id: string | null;
+  source_text_snippet: string | null;
+  source_confidence: string | null;
+  last_edited_by: string | null;
+  last_edited_at: string | null;
+  value_history: ValueHistoryEntry[];
+  user_verified: boolean;
 }
 
 export interface DealUnit {
@@ -130,6 +171,15 @@ export interface DealUnit {
   is_verified: boolean;
   sort_order: number;
   created_at: string;
+  // provenance
+  source_type: DataSourceType;
+  source_document_id: string | null;
+  source_text_snippet: string | null;
+  source_confidence: string | null;
+  last_edited_by: string | null;
+  last_edited_at: string | null;
+  value_history: ValueHistoryEntry[];
+  user_verified: boolean;
 }
 
 export interface DealMessage {

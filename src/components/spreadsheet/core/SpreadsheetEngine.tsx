@@ -32,6 +32,10 @@ import {
   ListFilter,
 } from "lucide-react";
 import { cn, formatCents } from "@/lib/utils";
+import {
+  SourceProvenancePopover,
+  sourceDotColor,
+} from "../SourceProvenancePopover";
 import { useSheetUiStore } from "./sheetUiStore";
 import { evaluateFormula, isFormula } from "./formulas";
 import { exportCSV, exportXLSX, type ExportColumn } from "./exportData";
@@ -57,6 +61,8 @@ export interface SpreadsheetEngineProps<T> {
   /** Optional row grouping (e.g. rent-roll buildings) */
   groupBy?: (row: T) => string;
   groupSubtotal?: (rows: T[]) => string;
+  /** Called after the provenance popover marks a cell's row as verified */
+  onCellVerified?: (rowIndex: number) => void;
 }
 
 type FilterValue =
@@ -130,6 +136,7 @@ export function SpreadsheetEngine<T>({
   dealName = "deal",
   groupBy,
   groupSubtotal,
+  onCellVerified,
 }: SpreadsheetEngineProps<T>) {
   // TanStack Table's return value can't be auto-memoized by the React
   // Compiler — opt this component out
@@ -502,6 +509,9 @@ export function SpreadsheetEngine<T>({
   // ── context menu ──
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; pos: CellPos } | null>(null);
 
+  // ── provenance popover ──
+  const [provPopover, setProvPopover] = useState<{ x: number; y: number; pos: CellPos } | null>(null);
+
   // ── column resizing ──
   const resizeRef = useRef<{ colId: string; startX: number; startW: number } | null>(null);
   const [resizingCol, setResizingCol] = useState<string | null>(null);
@@ -762,16 +772,18 @@ export function SpreadsheetEngine<T>({
     const style: React.CSSProperties = {};
     const t = metaType(col);
     const v = row.getValue(col.id);
+    // Verified cells are trusted — no conditional background flagging
+    const verified = col.columnDef.meta?.getProvenance?.(row.original)?.user_verified;
 
     if ((t === "currency" || t === "number" || t === "delta") && typeof v === "number") {
       if (v < 0) style.color = "#a8473a";
       const avg = colAverages.get(col.id);
-      if (avg != null && avg > 0) {
+      if (!verified && avg != null && avg > 0) {
         if (v > avg * 1.2) style.backgroundColor = "rgba(47,109,79,0.07)";
         else if (v < avg * 0.8 && v > 0) style.backgroundColor = "rgba(168,71,58,0.06)";
       }
     }
-    if (col.columnDef.meta?.required && (v == null || v === "")) {
+    if (!verified && col.columnDef.meta?.required && (v == null || v === "")) {
       style.backgroundColor = "rgba(154,107,63,0.10)";
     }
     return style;
@@ -1056,6 +1068,38 @@ export function SpreadsheetEngine<T>({
                               }}
                             />
                           )}
+                          {(() => {
+                            const prov = col.columnDef.meta?.getProvenance?.(row.original);
+                            if (!prov) return null;
+                            if (prov.user_verified) {
+                              return (
+                                <span
+                                  data-testid="verified-mark"
+                                  className="absolute top-0 right-[1px] text-[8px] leading-[10px] font-bold text-[#2f6d4f] pointer-events-none"
+                                  style={{ zIndex: 1 }}
+                                >
+                                  ✓
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                data-testid="source-dot"
+                                aria-label={`Data source for ${String(col.columnDef.header ?? col.id)}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setProvPopover({
+                                    x: e.clientX,
+                                    y: e.clientY,
+                                    pos: { r: leafIdx, c },
+                                  });
+                                }}
+                                onDoubleClick={(e) => e.stopPropagation()}
+                                className="absolute top-[2px] right-[2px] w-[6px] h-[6px] rounded-full cursor-pointer"
+                                style={{ background: sourceDotColor(prov), zIndex: 1 }}
+                              />
+                            );
+                          })()}
                           {isEditing ? (
                             <input
                               autoFocus
@@ -1128,6 +1172,31 @@ export function SpreadsheetEngine<T>({
           </div>
         </div>
       </div>
+
+      {/* Provenance popover */}
+      {provPopover &&
+        (() => {
+          const pRow = leafRows[provPopover.pos.r];
+          const pCol = visibleCols[provPopover.pos.c];
+          const prov =
+            pRow && pCol ? pCol.columnDef.meta?.getProvenance?.(pRow.original) : null;
+          if (!prov) return null;
+          const rawVal = pRow.getValue(pCol.id);
+          return (
+            <SourceProvenancePopover
+              open
+              onClose={() => setProvPopover(null)}
+              anchor={{ x: provPopover.x, y: provPopover.y }}
+              fieldLabel={String(pCol.columnDef.header ?? pCol.id)}
+              value={formatByType(metaType(pCol), rawVal) || "—"}
+              provenance={prov}
+              dealId={dealId}
+              verifyTarget={pCol.columnDef.meta?.getVerifyTarget?.(pRow.original) ?? null}
+              onEdit={() => startEdit(provPopover.pos)}
+              onVerified={() => onCellVerified?.(pRow.index)}
+            />
+          );
+        })()}
 
       {/* Context menu (Radix, anchored at the click position) */}
       {ctxMenu && (

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { buildUserEditProvenance, isValueEdit } from "@/lib/provenance";
+
+const UNIT_VALUE_KEYS = [
+  "unit_number", "unit_type", "current_rent", "market_rent", "status",
+  "lease_start", "lease_end", "tenant_notes", "bedrooms", "bathrooms", "sqft",
+];
 
 async function getWorkspaceId(
   supabase: Awaited<ReturnType<typeof createAdminClient>>,
@@ -38,9 +44,29 @@ export async function PATCH(
   if (!deal)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  let updates: Record<string, unknown> = body;
+  if (isValueEdit(body, UNIT_VALUE_KEYS)) {
+    const { data: existing } = await supabase
+      .from("deal_units")
+      .select("*")
+      .eq("id", unitId)
+      .eq("deal_id", id)
+      .single();
+    if (existing) {
+      const oldValue =
+        existing.current_rent != null
+          ? `$${(existing.current_rent / 100).toLocaleString("en-US")}/mo`
+          : String(existing.status ?? "");
+      updates = {
+        ...body,
+        ...buildUserEditProvenance(existing, oldValue, existing.current_rent, userId),
+      };
+    }
+  }
+
   const { data: unit, error } = await supabase
     .from("deal_units")
-    .update(body)
+    .update(updates)
     .eq("id", unitId)
     .eq("deal_id", id)
     .select()

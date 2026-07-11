@@ -14,6 +14,7 @@ import {
   type GradedMetricId,
 } from "@/lib/metrics/normalize";
 import { cn } from "@/lib/utils";
+import { buildProvenance } from "@/lib/provenance";
 import type { DealDataField } from "@/types";
 
 // ─── formatting (metrics are in display dollars, not cents) ─────────────────
@@ -479,6 +480,7 @@ interface DetailRow {
   value: string;
   note: string;
   source: string;
+  field: DealDataField;
 }
 
 function fieldDisplayValue(f: DealDataField): string {
@@ -488,7 +490,11 @@ function fieldDisplayValue(f: DealDataField): string {
 }
 
 function DetailGrid() {
-  const { activeDeal, dataFields } = useDealStore();
+  const { activeDeal, dataFields, documents, updateDataField } = useDealStore();
+  const docNames = useMemo(
+    () => new Map(documents.map((d) => [d.id, d.name])),
+    [documents]
+  );
   const rows = useMemo<DetailRow[]>(
     () =>
       dataFields.map((f) => ({
@@ -497,6 +503,7 @@ function DetailGrid() {
         value: fieldDisplayValue(f),
         note: f.ai_note ?? "",
         source: f.document_id ? "Parsed from documents" : "User entered",
+        field: f,
       })),
     [dataFields]
   );
@@ -504,11 +511,29 @@ function DetailGrid() {
   const columns = useMemo<ColumnDef<DetailRow, unknown>[]>(
     () => [
       { id: "metric", header: "Metric", accessorKey: "metric", size: 220, meta: { type: "text", editable: false } },
-      { id: "value", header: "Value", accessorKey: "value", size: 140, meta: { type: "text", align: "right", editable: false } },
+      {
+        id: "value",
+        header: "Value",
+        accessorKey: "value",
+        size: 140,
+        meta: {
+          type: "text",
+          align: "right",
+          editable: false,
+          getProvenance: (r) =>
+            buildProvenance(
+              r.field,
+              r.field.source_document_id
+                ? docNames.get(r.field.source_document_id) ?? null
+                : null
+            ),
+          getVerifyTarget: (r) => ({ kind: "field" as const, id: r.field.id }),
+        },
+      },
       { id: "note", header: "Note", accessorKey: "note", size: 240, meta: { type: "text", editable: false } },
       { id: "source", header: "Source", accessorKey: "source", size: 160, meta: { type: "status", editable: false } },
     ],
-    []
+    [docNames]
   );
 
   return (
@@ -519,6 +544,10 @@ function DetailGrid() {
       showRowNumbers
       dealId={activeDeal?.id ?? ""}
       tableId="summary-detail"
+      onCellVerified={(rowIndex) => {
+        const row = rows[rowIndex];
+        if (row) updateDataField(row.field.id, { user_verified: true });
+      }}
       dealName={activeDeal?.name}
       emptyState={
         <div className="text-center">

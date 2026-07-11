@@ -504,3 +504,27 @@ create policy "Buyers access follows workspace"
     select id from workspaces
     where owner_clerk_id = current_setting('request.jwt.claims', true)::jsonb->>'sub'
   ));
+
+-- ============================================================
+-- MIGRATION: Data Provenance — source tracking + audit trail
+-- ============================================================
+alter table deal_data_fields
+  add column if not exists source_type text not null default 'ai_parsed',
+  -- 'ai_parsed' | 'user_edited' | 'calculated' | 'ai_inferred'
+  add column if not exists source_document_id uuid references deal_documents(id) on delete set null,
+  add column if not exists source_text_snippet text,
+  add column if not exists source_confidence text,
+  add column if not exists last_edited_by text,
+  add column if not exists last_edited_at timestamptz,
+  add column if not exists value_history jsonb not null default '[]',
+  add column if not exists user_verified boolean not null default false;
+
+alter table deal_units
+  add column if not exists source_type text not null default 'ai_parsed',
+  add column if not exists source_document_id uuid references deal_documents(id) on delete set null,
+  add column if not exists source_text_snippet text,
+  add column if not exists source_confidence text,
+  add column if not exists last_edited_by text,
+  add column if not exists last_edited_at timestamptz,
+  add column if not exists value_history jsonb not null default '[]',
+  add column if not exists user_verified boolean not null default false;

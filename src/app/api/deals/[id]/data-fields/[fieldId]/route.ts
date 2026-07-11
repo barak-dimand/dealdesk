@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { buildUserEditProvenance, isValueEdit } from "@/lib/provenance";
+
+const FIELD_VALUE_KEYS = ["field_value", "field_value_numeric", "field_label", "ai_note"];
 
 async function getWorkspaceId(
   supabase: Awaited<ReturnType<typeof createAdminClient>>,
@@ -38,9 +41,32 @@ export async function PATCH(
   if (!deal)
     return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Value edits move the old value into the audit history and mark the row
+  // user_edited; flag-only updates (e.g. user_verified) pass through untouched
+  let updates: Record<string, unknown> = body;
+  if (isValueEdit(body, FIELD_VALUE_KEYS)) {
+    const { data: existing } = await supabase
+      .from("deal_data_fields")
+      .select("*")
+      .eq("id", fieldId)
+      .eq("deal_id", id)
+      .single();
+    if (existing) {
+      updates = {
+        ...body,
+        ...buildUserEditProvenance(
+          existing,
+          existing.field_value ?? String(existing.field_value_numeric ?? ""),
+          existing.field_value_numeric,
+          userId
+        ),
+      };
+    }
+  }
+
   const { data: field, error } = await supabase
     .from("deal_data_fields")
-    .update(body)
+    .update(updates)
     .eq("id", fieldId)
     .eq("deal_id", id)
     .select()

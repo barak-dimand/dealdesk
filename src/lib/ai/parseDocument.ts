@@ -24,6 +24,10 @@ export interface ParsedUnit {
   lease_start: string | null;
   lease_end: string | null;
   tenant_notes: string | null;
+  // provenance
+  source_text_snippet?: string | null;
+  source_type?: "ai_parsed" | "ai_inferred";
+  source_confidence?: "high" | "medium" | "low";
 }
 
 export interface ParsedLineItem {
@@ -33,6 +37,9 @@ export interface ParsedLineItem {
   period: "monthly" | "annual" | "per_unit";
   ai_note: string | null;
   confidence: number;
+  // provenance
+  source_text_snippet?: string | null;
+  source_type?: "ai_parsed" | "ai_inferred";
 }
 
 function fileTypeHint(fileType: string): string {
@@ -81,6 +88,12 @@ When returning no units due to aggregate-only data, you MUST add this warning:
 Additional unit quality rule:
 If you are uncertain about any individual unit's rent, status, or type, EXCLUDE that unit from the units array entirely and add a warning instead.
 
+PROVENANCE — for each value you extract, include the source_text_snippet: copy the
+exact text from the document where you found this value (max 200 chars).
+If you are inferring or estimating a value rather than reading it directly,
+set source_type to 'ai_inferred' and confidence to 'low' or 'medium'.
+Only use source_type 'ai_parsed' when the value is explicitly stated.
+
 STANDARDIZED FIELD KEYS — always use these exact field_key values (never variants):
 - 'gross_operating_income' (NOT 'annual_gross_income', 'gross_income', or 'total_income')
 - 'reported_noi' (NOT 'net_operating_income', 'reported_net_income', or 'noi')
@@ -121,7 +134,10 @@ Extract all financial data and return as JSON with this exact structure:
       "status": "occupied|vacant|leased|credit|other",
       "lease_start": "YYYY-MM-DD or null",
       "lease_end": "YYYY-MM-DD or null",
-      "tenant_notes": "any notes or null"
+      "tenant_notes": "any notes or null",
+      "source_text_snippet": "exact text from document where this unit appears (max 200 chars)",
+      "source_type": "ai_parsed|ai_inferred",
+      "source_confidence": "high|medium|low"
     }
   ],
   "incomeItems": [
@@ -131,7 +147,9 @@ Extract all financial data and return as JSON with this exact structure:
       "value_numeric": annual_dollars,
       "period": "annual",
       "ai_note": "flag or null",
-      "confidence": 0.0-1.0
+      "confidence": 0.0-1.0,
+      "source_text_snippet": "exact text where this value was found (max 200 chars)",
+      "source_type": "ai_parsed|ai_inferred"
     }
   ],
   "expenseItems": [
@@ -141,7 +159,9 @@ Extract all financial data and return as JSON with this exact structure:
       "value_numeric": annual_dollars,
       "period": "annual",
       "ai_note": "flag if elevated or unusual",
-      "confidence": 0.0-1.0
+      "confidence": 0.0-1.0,
+      "source_text_snippet": "exact text where this value was found (max 200 chars)",
+      "source_type": "ai_parsed|ai_inferred"
     }
   ],
   "summaryItems": [
@@ -151,7 +171,9 @@ Extract all financial data and return as JSON with this exact structure:
       "value_numeric": number_or_null,
       "period": "annual",
       "ai_note": null,
-      "confidence": 0.9
+      "confidence": 0.9,
+      "source_text_snippet": "exact text where this value was found (max 200 chars)",
+      "source_type": "ai_parsed|ai_inferred"
     }
   ]
 }

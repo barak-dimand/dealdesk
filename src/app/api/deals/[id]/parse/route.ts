@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { extractTextFromFile } from "@/lib/parsers/extractText";
 import { parseDocumentWithAI } from "@/lib/ai/parseDocument";
 import { generateDealNotesIfEmpty } from "@/lib/ai/generateNotes";
+import { buildReparseHistory } from "@/lib/provenance";
 
 const MAX_PROMPT_CHARS = 90000;
 
@@ -150,73 +151,137 @@ export async function POST(
       context
     );
 
-    // Persist units (rent roll)
+    // Persist units (rent roll) — merge by unit_number so re-parses and new
+    // documents override values while preserving the audit history
     if (parsed.units.length > 0) {
-      const unitRows = parsed.units.map((u, i) => ({
-        deal_id: dealId,
-        document_id: documentId,
-        unit_number: u.unit_number,
-        unit_type: u.unit_type,
-        current_rent: u.current_rent != null ? Math.round(u.current_rent * 100) : null,
-        market_rent: u.market_rent != null ? Math.round(u.market_rent * 100) : null,
-        status: u.status,
-        lease_start: u.lease_start,
-        lease_end: u.lease_end,
-        tenant_notes: u.tenant_notes,
-        sort_order: i,
-        is_verified: false,
-      }));
+      const { data: existingUnits } = await supabase
+        .from("deal_units")
+        .select("*")
+        .eq("deal_id", dealId);
+      const unitByNumber = new Map(
+        (existingUnits ?? []).map((u) => [u.unit_number, u])
+      );
 
-      await supabase.from("deal_units").delete().eq("document_id", documentId);
-      await supabase.from("deal_units").insert(unitRows);
+      for (const [i, u] of parsed.units.entries()) {
+        const provenance = {
+          source_type: u.source_type ?? "ai_parsed",
+          source_document_id: documentId,
+          source_text_snippet: u.source_text_snippet?.slice(0, 200) ?? null,
+          source_confidence: u.source_confidence ?? confidenceLabel(parsed.confidence),
+        };
+        const values = {
+          unit_type: u.unit_type,
+          current_rent: u.current_rent != null ? Math.round(u.current_rent * 100) : null,
+          market_rent: u.market_rent != null ? Math.round(u.market_rent * 100) : null,
+          status: u.status,
+          lease_start: u.lease_start,
+          lease_end: u.lease_end,
+          tenant_notes: u.tenant_notes,
+          sort_order: i,
+        };
+
+        const existing = unitByNumber.get(u.unit_number);
+        if (existing) {
+          const oldValue =
+            existing.current_rent != null
+              ? `$${(existing.current_rent / 100).toLocaleString("en-US")}/mo`
+              : String(existing.status ?? "");
+          await supabase
+            .from("deal_units")
+            .update({
+              ...values,
+              ...provenance,
+              value_history: buildReparseHistory(
+                existing,
+                oldValue,
+                existing.current_rent,
+                doc.name
+              ),
+            })
+            .eq("id", existing.id);
+        } else {
+          await supabase.from("deal_units").insert({
+            deal_id: dealId,
+            document_id: documentId,
+            unit_number: u.unit_number,
+            ...values,
+            ...provenance,
+            is_verified: false,
+            value_history: [],
+          });
+        }
+      }
     }
 
-    // Persist income, expense, and summary items
-    const allFields = [
-      ...parsed.incomeItems.map((item, i) => ({
-        deal_id: dealId,
-        document_id: documentId,
-        category: "income" as const,
-        field_key: item.field_key,
-        field_label: item.field_label,
-        field_value: item.value_numeric != null ? `$${item.value_numeric.toLocaleString()}/yr` : null,
-        field_value_numeric: item.value_numeric,
-        field_period: item.period,
-        ai_confidence: item.confidence,
-        ai_note: item.ai_note,
-        sort_order: i,
-      })),
-      ...parsed.expenseItems.map((item, i) => ({
-        deal_id: dealId,
-        document_id: documentId,
-        category: "expense" as const,
-        field_key: item.field_key,
-        field_label: item.field_label,
-        field_value: item.value_numeric != null ? `$${item.value_numeric.toLocaleString()}/yr` : null,
-        field_value_numeric: item.value_numeric,
-        field_period: item.period,
-        ai_confidence: item.confidence,
-        ai_note: item.ai_note,
-        sort_order: i,
-      })),
-      ...parsed.summaryItems.map((item, i) => ({
-        deal_id: dealId,
-        document_id: documentId,
-        category: "summary" as const,
-        field_key: item.field_key,
-        field_label: item.field_label,
-        field_value: item.value_numeric != null ? String(item.value_numeric) : null,
-        field_value_numeric: item.value_numeric,
-        field_period: item.period,
-        ai_confidence: item.confidence,
-        ai_note: item.ai_note,
-        sort_order: i,
-      })),
+    // Persist income, expense, and summary items — merge by field_key so
+    // re-parses override values while preserving the audit history (this also
+    // stops duplicate rows from repeated parse runs)
+    const parsedItems = [
+      ...parsed.incomeItems.map((item, i) => ({ item, category: "income" as const, i })),
+      ...parsed.expenseItems.map((item, i) => ({ item, category: "expense" as const, i })),
+      ...parsed.summaryItems.map((item, i) => ({ item, category: "summary" as const, i })),
     ];
 
-    if (allFields.length > 0) {
-      await supabase.from("deal_data_fields").delete().eq("document_id", documentId);
-      await supabase.from("deal_data_fields").insert(allFields);
+    if (parsedItems.length > 0) {
+      const { data: allExistingFields } = await supabase
+        .from("deal_data_fields")
+        .select("*")
+        .eq("deal_id", dealId);
+      const fieldByKey = new Map(
+        (allExistingFields ?? []).map((f) => [f.field_key, f])
+      );
+
+      for (const { item, category, i } of parsedItems) {
+        const fieldValue =
+          item.value_numeric == null
+            ? null
+            : category === "summary"
+              ? String(item.value_numeric)
+              : `$${item.value_numeric.toLocaleString()}/yr`;
+        const values = {
+          field_label: item.field_label,
+          field_value: fieldValue,
+          field_value_numeric: item.value_numeric,
+          field_period: item.period,
+          ai_confidence: item.confidence,
+          ai_note: item.ai_note,
+          sort_order: i,
+        };
+        const provenance = {
+          source_type: item.source_type ?? "ai_parsed",
+          source_document_id: documentId,
+          source_text_snippet: item.source_text_snippet?.slice(0, 200) ?? null,
+          source_confidence: confidenceLabel(item.confidence),
+        };
+
+        const existing = fieldByKey.get(item.field_key);
+        if (existing) {
+          await supabase
+            .from("deal_data_fields")
+            .update({
+              ...values,
+              ...provenance,
+              document_id: documentId,
+              value_history: buildReparseHistory(
+                existing,
+                existing.field_value ?? String(existing.field_value_numeric ?? ""),
+                existing.field_value_numeric,
+                doc.name
+              ),
+            })
+            .eq("id", existing.id);
+        } else {
+          await supabase.from("deal_data_fields").insert({
+            deal_id: dealId,
+            document_id: documentId,
+            category,
+            field_key: item.field_key,
+            ...values,
+            ...provenance,
+            value_history: [],
+          });
+        }
+      }
     }
 
     // Count all units across this deal and update unit_count

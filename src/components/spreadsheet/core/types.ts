@@ -1,4 +1,5 @@
 import type { RowData } from "@tanstack/react-table";
+import type { DataProvenance } from "@/types";
 
 export type CellType = "text" | "number" | "currency" | "date" | "status" | "delta" | "percent";
 
@@ -12,6 +13,10 @@ declare module "@tanstack/react-table" {
     editable?: boolean;
     /** Empty cells in required columns get an amber hint background */
     required?: boolean;
+    /** Source indicator dot + provenance popover for this cell */
+    getProvenance?: (row: TData) => DataProvenance | null;
+    /** Target for the "Mark as verified" action in the provenance popover */
+    getVerifyTarget?: (row: TData) => { kind: "field" | "unit"; id: string } | null;
   }
 }
 
