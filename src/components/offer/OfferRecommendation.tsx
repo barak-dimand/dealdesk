@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useDealStore } from "@/store/dealStore";
 import { cn, formatCentsFull, formatPercent } from "@/lib/utils";
+import { computeMetrics } from "@/lib/metrics/normalize";
 import {
   Loader2,
   RefreshCw,
@@ -321,12 +322,19 @@ export function OfferRecommendation() {
     recommendation,
     isGeneratingRec,
     dataFields,
+    units,
+    offerStructures,
     setRecommendation,
     setIsGeneratingRec,
     setActiveDeal,
     setLOI,
     setCenterTab,
   } = useDealStore();
+
+  // Normalized metrics — same source of truth as the Summary scorecard
+  const metrics = activeDeal
+    ? computeMetrics(activeDeal, units, dataFields, recommendation, offerStructures)
+    : null;
 
   const [breakdownOpen, setBreakdownOpen] = useState(true);
   const [loiLoadingId, setLoiLoadingId] = useState<string | null>(null);
@@ -471,6 +479,14 @@ export function OfferRecommendation() {
             >
               {fmtSigned(atAsk.cash_flow_per_unit)}/unit @ ask
             </span>
+            {metrics?.reportedNOI != null && (
+              <span className="text-[11.5px] font-semibold px-2.5 py-1 rounded-[8px] flex-shrink-0 bg-white/15 text-white/90">
+                NOI ${Math.round(metrics.reportedNOI).toLocaleString("en-US")}/yr
+                {metrics.capRateAtAsk != null
+                  ? ` · ${metrics.capRateAtAsk.toFixed(1)}% cap`
+                  : ""}
+              </span>
+            )}
           </div>
           <div className="text-[14px] font-semibold text-white leading-[1.4]">
             {rec.verdict}

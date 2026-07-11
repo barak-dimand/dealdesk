@@ -4,6 +4,7 @@ import { useState } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useDealStore } from "@/store/dealStore";
 import { cn, formatCentsFull } from "@/lib/utils";
+import { computeMetrics } from "@/lib/metrics/normalize";
 import { ChevronDown, ChevronUp, TrendingUp, AlertTriangle, ListChecks } from "lucide-react";
 import { ParseReviewModal } from "@/components/files/ParseReviewModal";
 import type { DealDocument } from "@/types";
@@ -90,12 +91,28 @@ export function DealIntelligenceBanner({
   bannerMode = "expanded",
   onToggle,
 }: DealIntelligenceBannerProps) {
-  const { activeDeal, units, dataFields, documents, recommendation, setCenterTab } =
-    useDealStore();
+  const {
+    activeDeal,
+    units,
+    dataFields,
+    documents,
+    recommendation,
+    offerStructures,
+    setCenterTab,
+  } = useDealStore();
   const [reviewDoc, setReviewDoc] = useState<DealDocument | null>(null);
 
   const parsedDocs = documents.filter((d) => d.status === "parsed");
   if (!activeDeal || parsedDocs.length === 0) return null;
+
+  // Single source of truth — same numbers as the Summary scorecard
+  const metrics = computeMetrics(
+    activeDeal,
+    units,
+    dataFields,
+    recommendation,
+    offerStructures
+  );
 
   const collapsed = bannerMode === "collapsed";
   const peek = bannerMode === "peek";
@@ -103,14 +120,8 @@ export function DealIntelligenceBanner({
   // ── Card 1: Value Add Opportunities ──
   const opportunities: string[] = [];
 
-  const upsideCents = units.reduce(
-    (sum, u) =>
-      u.current_rent != null && u.market_rent != null && u.current_rent < u.market_rent
-        ? sum + (u.market_rent - u.current_rent)
-        : sum,
-    0
-  );
-  if (upsideCents > 0) {
+  if (metrics.rentUpsideMonthly != null && metrics.rentUpsideMonthly > 0) {
+    const upsideCents = Math.round(metrics.rentUpsideMonthly * 100);
     opportunities.push(
       `Rent upside available: +${formatCentsFull(upsideCents)}/mo (+${formatCentsFull(upsideCents * 12)}/yr)`
     );
@@ -142,23 +153,10 @@ export function DealIntelligenceBanner({
   const docWarnings = parsedDocs.flatMap((d) => d.parse_warnings ?? []).slice(0, 3);
   risks.push(...docWarnings);
 
-  const rmField = dataFields.find(
-    (f) => /repair/i.test(f.field_key) && f.field_value_numeric != null
-  );
-  const grossField =
-    dataFields.find(
-      (f) =>
-        f.category === "income" &&
-        /gross/i.test(f.field_key) &&
-        f.field_value_numeric != null
-    ) ?? dataFields.find((f) => f.category === "income" && f.field_value_numeric != null);
-  if (rmField?.field_value_numeric && grossField?.field_value_numeric) {
-    const pct = (rmField.field_value_numeric / grossField.field_value_numeric) * 100;
-    if (pct > 15) {
-      risks.push(
-        `R&M at ${pct.toFixed(1)}% of income — request 3 years of repair invoices`
-      );
-    }
+  if (metrics.rmRatioFlag && metrics.rmPctIncome != null) {
+    risks.push(
+      `R&M at ${metrics.rmPctIncome.toFixed(1)}% of income — request 3 years of repair invoices`
+    );
   }
 
   for (const u of units.filter((u) => u.status === "credit")) {

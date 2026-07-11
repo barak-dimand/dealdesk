@@ -81,6 +81,15 @@ When returning no units due to aggregate-only data, you MUST add this warning:
 Additional unit quality rule:
 If you are uncertain about any individual unit's rent, status, or type, EXCLUDE that unit from the units array entirely and add a warning instead.
 
+STANDARDIZED FIELD KEYS — always use these exact field_key values (never variants):
+- 'gross_operating_income' (NOT 'annual_gross_income', 'gross_income', or 'total_income')
+- 'reported_noi' (NOT 'net_operating_income', 'reported_net_income', or 'noi')
+- 'repairs_maintenance' (NOT 'repairs_and_maintenance' or 'maintenance')
+- 'cap_rate_at_ask' (NOT 'cap_rate_asking' or 'cap_rate')
+- 'total_expenses' (NOT 'total_operating_expenses')
+- 'property_management' (NOT 'management_fee' or 'management')
+- 'asking_price', 'price_per_unit', 'gross_rent_multiplier', 'vacancy_rate', 'pro_forma_noi'
+
 Respond ONLY with valid JSON matching the ParsedDealData schema.`;
 
 export async function parseDocumentWithAI(

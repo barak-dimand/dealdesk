@@ -1,8 +1,29 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { calcAnnualPayment } from "@/lib/utils";
+import { computeMetrics } from "@/lib/metrics/normalize";
 import type { DealRecommendation, DealTier, OfferScenario, DealRiskFlag } from "@/types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+function normalizedMetricsBlock(ctx: RecommendContext): string {
+  const m = computeMetrics(
+    { asking_price: ctx.askPrice, unit_count: ctx.unitCount },
+    ctx.units,
+    ctx.dataFields,
+    null,
+    []
+  );
+  const d = (v: number | null) =>
+    v == null ? "n/a" : `$${Math.round(v).toLocaleString("en-US")}`;
+  const p = (v: number | null) => (v == null ? "n/a" : `${v.toFixed(1)}%`);
+  return [
+    `  GOI: ${d(m.grossOperatingIncome)}/yr · Total expenses: ${d(m.totalExpenses)}/yr · Reported NOI: ${d(m.reportedNOI)}/yr`,
+    `  Adjusted NOI (normalized reserves): ${d(m.adjustedNOI)}/yr · Pro-forma NOI: ${d(m.proFormaNOI)}/yr`,
+    `  Expense ratio: ${p(m.expenseRatio)} · R&M % of income: ${p(m.rmPctIncome)} · Cap @ ask: ${p(m.capRateAtAsk)}`,
+    `  GPR: ${d(m.grossPotentialRent)}/mo · In-place rent: ${d(m.inPlaceRent)}/mo · Rent upside: ${d(m.rentUpsideMonthly)}/mo`,
+    `  Physical vacancy: ${p(m.physicalVacancyRate)} · GRM: ${m.grossRentMultiplier != null ? m.grossRentMultiplier.toFixed(2) + "x" : "n/a"}`,
+  ].join("\n");
+}
 
 export interface RecommendContext {
   dealName: string;
@@ -246,6 +267,9 @@ Gross monthly income (current rents): $${grossMonthlyDollars.toFixed(0)}/mo
 Monthly NOI after all operating exp:  $${monthlyNOIDollars.toFixed(0)}/mo ($${annualNOIDollars.toFixed(0)}/yr)
 Cap rate at ask (on this NOI):        ${capRateAtAsk.toFixed(2)}%
 NOI per unit per month:               $${(monthlyNOIDollars / unitCount).toFixed(0)}/unit/mo
+
+NORMALIZED PARSED METRICS (alias + cents/dollars corrected — same numbers shown in the app's scorecard; prefer these over raw fields when they conflict):
+${normalizedMetricsBlock(ctx)}
 
 RENT ROLL (${ctx.units.length} units):
 ${unitLines || "  No unit data provided"}
