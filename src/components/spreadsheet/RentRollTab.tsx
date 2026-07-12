@@ -177,11 +177,17 @@ export function RentRollTab() {
     const unit = units[rowIndex];
     if (!unit || !EDITABLE_FIELDS.has(columnId)) return;
     updateUnit(unit.id, { [columnId]: value });
-    await fetch(`/api/deals/${dealId}/units/${unit.id}`, {
+    const res = await fetch(`/api/deals/${dealId}/units/${unit.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [columnId]: value }),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (res?.ok) {
+      // Server response carries the new provenance (source_type: user_edited,
+      // value_history, …) that drives the source dot
+      const { unit: updated } = await res.json();
+      if (updated) updateUnit(unit.id, updated);
+    }
   }
 
   async function handleRowAdd() {

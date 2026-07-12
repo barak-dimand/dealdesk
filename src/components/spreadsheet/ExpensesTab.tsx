@@ -123,11 +123,17 @@ export function ExpensesTab() {
 
   async function patchField(fieldId: string, updates: Record<string, unknown>) {
     updateDataField(fieldId, updates);
-    await fetch(`/api/deals/${dealId}/data-fields/${fieldId}`, {
+    const res = await fetch(`/api/deals/${dealId}/data-fields/${fieldId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (res?.ok) {
+      // Server response carries the new provenance (source_type: user_edited,
+      // value_history, …) that drives the source dot
+      const { field } = await res.json();
+      if (field) updateDataField(fieldId, field);
+    }
   }
 
   function handleCellChange(rowIndex: number, columnId: string, value: string | number | null) {
