@@ -1,8 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+import { client, MODEL_FAST } from "@/lib/ai/client";
 
 export interface ParsedDealData {
   units: ParsedUnit[];
@@ -188,7 +184,7 @@ Important:
 
   try {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: MODEL_FAST,
       max_tokens: 8096,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: prompt }],

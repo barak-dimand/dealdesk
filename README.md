@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dealdesk
 
-## Getting Started
+A deal intelligence platform for a single real estate operator: acquisitions
+(deal parsing, AI recommendations, LOI generation) expanding into ongoing
+portfolio operations (leases, rent truth, expense truth, compliance).
 
-First, run the development server:
+## Stack
+
+Next.js 16 App Router · React 19 · Supabase (Postgres) · Clerk auth · Zustand ·
+Tailwind CSS · TypeScript strict · Vitest
+
+This is Next.js 16 — APIs and conventions differ from most training data. See
+`AGENTS.md` before writing framework code, and note that middleware lives at
+`src/proxy.ts`, not `middleware.ts`.
+
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). You'll need a `.env.local`
+with Supabase, Clerk, and Anthropic credentials — see `.env.local.example`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Database
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Schema changes are Supabase CLI migrations under `supabase/migrations/`, applied
+with:
 
-## Learn More
+```bash
+npm run db:migrate
+```
 
-To learn more about Next.js, take a look at the following resources:
+`src/lib/supabase/schema.sql` is deprecated (superseded by
+`supabase/migrations/0001_baseline.sql`) — do not hand-edit it or the live
+database. See ADR-0001 in `docs/decisions/`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Testing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm test              # single run
+npm run test:watch    # watch mode
+npm run test:coverage # coverage report
+```
 
-## Deploy on Vercel
+Test fixtures are centralized in `src/test/fixtures/` — don't invent inline test
+data. CI (`.github/workflows/test.yml`) runs `npm test` and `npm run build` on
+every push and PR.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Project intelligence
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Before doing any non-trivial work, read:
+
+- **`CLAUDE.md`** — architecture, conventions, flows, and gotchas an agent needs
+  to work in this codebase without re-deriving them each session.
+- **`docs/BUILD.md`** — what the operations module is and why, and the
+  constraints that must hold.
+- **`docs/decisions/`** — numbered ADRs. Each records one decision permanently;
+  they are not re-litigated without being explicitly asked to.
+- **`docs/journal/`** — one dated file per working session.

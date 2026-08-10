@@ -1,8 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { client, MODEL_FAST } from "@/lib/ai/client";
 import { fillAllSections } from "@/lib/loi/loiTemplate";
 import type { LOITerm, LOISection } from "@/types";
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 interface LOIContext {
   dealName: string;
@@ -314,7 +312,7 @@ Term ids to extract: offer_price, financing_structure, down_payment, down_paymen
   let terms = baseTerms;
   try {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: MODEL_FAST,
       max_tokens: 2048,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],

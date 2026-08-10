@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { client, MODEL_FAST } from "@/lib/ai/client";
 import type { createAdminClient } from "@/lib/supabase/server";
 
 type AdminClient = Awaited<ReturnType<typeof createAdminClient>>;
@@ -51,8 +51,6 @@ export async function generateDealNotesIfEmpty(
     .map((f) => `[${f.category}] ${f.field_label}: ${f.field_value ?? "—"}${f.ai_note ? ` (${f.ai_note})` : ""}`)
     .join("\n");
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
   const prompt = `You are a real estate due-diligence expert. Generate deal-specific notes for this deal.
 
 Deal: ${deal.name}
@@ -81,7 +79,7 @@ Produce HTML notes (h1, h2, p, ul, li tags ONLY — no markdown, no other tags) 
 Respond with ONLY the HTML. No preamble, no code fences.`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: MODEL_FAST,
     max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   });

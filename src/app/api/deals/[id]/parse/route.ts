@@ -5,6 +5,7 @@ import { extractTextFromFile } from "@/lib/parsers/extractText";
 import { parseDocumentWithAI } from "@/lib/ai/parseDocument";
 import { generateDealNotesIfEmpty } from "@/lib/ai/generateNotes";
 import { buildReparseHistory } from "@/lib/provenance";
+import { client, MODEL_FAST } from "@/lib/ai/client";
 
 const MAX_PROMPT_CHARS = 90000;
 
@@ -355,9 +356,6 @@ async function extractImageWithVision(
   buffer: Buffer,
   fileName: string
 ): Promise<string> {
-  const Anthropic = (await import("@anthropic-ai/sdk")).default;
-  const c = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
   const base64 = buffer.toString("base64");
   const mediaType = mimeTypeFromFileName(fileName) as
     | "image/jpeg"
@@ -365,8 +363,8 @@ async function extractImageWithVision(
     | "image/gif"
     | "image/webp";
 
-  const response = await c.messages.create({
-    model: "claude-sonnet-4-6",
+  const response = await client.messages.create({
+    model: MODEL_FAST,
     max_tokens: 4096,
     messages: [
       {

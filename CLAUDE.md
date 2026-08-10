@@ -2,8 +2,62 @@
 
 # Dealdesk — Project Intelligence
 
+## Required reading before any operations-domain work
+
+This project is expanding from acquisitions (deals, LOIs) into ongoing portfolio
+operations. Before touching anything under `src/domains/`, or before re-deriving a
+decision that might already be settled, read:
+
+- **`docs/BUILD.md`** — the root planning document: problem statement, guiding
+  principles (P1–P8), domain model, phase plan.
+- **`docs/decisions/`** — numbered ADRs, one decision each. **Do not re-litigate an
+  ADR without being explicitly asked to.** If you think one is wrong, say so and wait.
+- **`docs/journal/`** — one dated file per working session; what was done, what
+  surprised the session, what was deferred. Write one as part of definition-of-done.
+
+## Domain-first structure (new code)
+
+Code for the operations module lives at `src/domains/<domain>/` — schema, handlers,
+and (later) state machine and rules colocated per domain, each with its own
+`CLAUDE.md` stating invariants and dependencies. Route handlers under
+`src/app/api/` stay thin: `withWorkspace()` plus a call into the domain layer. This
+does not apply retroactively to the existing deal-acquisition code, which stays
+layer-first (`src/lib/ai/`, `src/app/api/deals/...`) — convert opportunistically only
+when a file is already being touched for another reason.
+
 ## Stack
 Next.js 16 App Router · React 19 · Supabase (Postgres + RLS) · Clerk auth · Zustand store · Tailwind CSS · TypeScript strict
+
+## Schema, migrations, and authorization (Phase 0 hardening)
+
+- **Migrations**: `supabase/migrations/` is the source of truth (ADR-0001), applied
+  via `npm run db:migrate`. `src/lib/supabase/schema.sql` is **retired and deleted**
+  (2026-08-10) — `0001_baseline.sql` was generated directly from live introspection of
+  the Supabase project (not copied from schema.sql; `supabase db dump` needs Docker,
+  which this environment doesn't have, so it was built from `list_tables`/`pg_policies`/
+  `pg_constraint` queries instead). It is therefore true by construction. Two real
+  places where schema.sql had drifted from what was actually live: `deals.status`'s
+  default was `'evaluating'` in schema.sql vs. actually `'analyzing'`; a
+  `deal_loi_updated_at` trigger was declared in schema.sql but never applied. See
+  `docs/journal/2026-08-10.md` for the full comparison. Note also: the live database's
+  own migration history table already had 6 real CLI-applied migrations predating this
+  session, whose source files aren't in this repo — `0001_baseline.sql` was not
+  reconciled against that history table (no `migration repair` calls); it only
+  guarantees an empty database ends up matching the live schema.
+- **Authorization**: every route resolves workspace scope through
+  `withWorkspace()` (`src/lib/auth/withWorkspace.ts`), not by hand-rolling
+  `getWorkspaceId()`. RLS policies exist but are **intentionally inert** — the
+  service-role client bypasses them; see the comment block in `0001_baseline.sql`
+  and ADR-0004. `src/app/api/entities/route.ts` is the reference implementation to
+  copy for new routes.
+- **Entity shape**: one Zod schema per entity generates the TypeScript type, API
+  boundary validation, and (for the future query layer) a tool-use JSON schema via
+  `z.toJSONSchema()` — see `src/lib/schema/CLAUDE.md` (ADR-0005). Not backfilled onto
+  the existing deal routes; opportunistic only.
+- **Anthropic client**: import `client` and `MODEL_FAST` / `MODEL_DEEP` from
+  `src/lib/ai/client.ts` rather than constructing a new client. Existing call sites
+  still hand-parse JSON from text responses — that conversion to tool use is
+  deferred to Phase 1's query layer, not done in Phase 0.
 
 ## Recommendation → LOI Flow
 
@@ -104,4 +158,15 @@ The banner/table split in `SpreadsheetView.tsx` is a draggable vertical split. H
 ## Known V1 Gaps (future sessions)
 - **Session E**: Portfolio space (multi-deal analytics, aggregate views)
 - **PDF export**: LOI document → downloadable PDF
-- **Email send integration**: Send LOI directly from the app via email provider (currently records `sent` state but does not deliver email)
+- ~~Email send integration~~ **Corrected 2026-08-10**: this was stale. `sendLOIEmail()`
+  (`src/lib/email/sendLOI.ts`) is fully wired via Resend and is called from
+  `POST /api/deals/[id]/loi` whenever `loi_state` transitions to `"sent"` — it creates
+  a version snapshot, attempts real delivery, and surfaces success/failure back to the
+  client without blocking the state save. It does not deliver in this dev environment
+  only because `RESEND_API_KEY` isn't set locally — that's a config gap, not a missing
+  feature.
+
+## Operations module (Phase 0+)
+Portfolio operations (leases, rent truth, expense truth, compliance) is a new domain
+being layered onto the acquisitions product described above. See "Required reading"
+at the top of this file before working in `src/domains/`.

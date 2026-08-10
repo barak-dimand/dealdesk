@@ -1,9 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { client, MODEL_DEEP } from "@/lib/ai/client";
 import { calcAnnualPayment } from "@/lib/utils";
 import { computeMetrics } from "@/lib/metrics/normalize";
 import type { DealRecommendation, DealTier, OfferScenario, DealRiskFlag } from "@/types";
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 function normalizedMetricsBlock(ctx: RecommendContext): string {
   const m = computeMetrics(
@@ -280,7 +278,7 @@ ${fieldLines || "  No additional fields"}
 IMPORTANT: Verify your scenarios produce the required cash flow AFTER subtracting monthly debt service from the monthly NOI above. Show the math check in creative_structure_notes.`;
 
   const response = await client.messages.create({
-    model: "claude-opus-4-7",
+    model: MODEL_DEEP,
     max_tokens: 8096,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
