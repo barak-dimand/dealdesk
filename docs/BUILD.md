@@ -211,6 +211,85 @@ an asset under management with a real lease. Same columns, different truth condi
 - **`decision`** — a fork requiring judgment: context, options with computed consequences,
   chosen option, resulting actions.
 
+### Leases carry their own economics
+Lease terms are **not** portfolio or property settings. Comparing the November 2024
+template against the executed 52 Shenango lease (signed 2024-11-25), nearly every economic
+term differs:
+
+| Term | Template | 52 Shenango |
+|---|---|---|
+| Late fee | 5% + $5/day, capped 15% | **$45/day, uncapped** |
+| Grace period | 5 days | **4 days** |
+| Trash | Landlord pays | **Tenant pays** |
+| Payment rail | Buildium / RentRedi (contradictory) | RentRedi |
+| Grass / lockout fees | Unpriced | $40 / $60 |
+
+- **`lease_terms`** — a structured, per-lease record carrying rent, grace period, late-fee
+  formula, NSF fee, ancillary fees, pet and parking terms, payment rail, and
+  `template_version` (this document is stamped "November 2024" on every page). Provenance
+  points to the source document and page.
+- **Utility responsibility is lease-scoped.** Which accounts are the owner's obligation
+  depends on the lease in effect and can flip at turnover. `utility_account`
+  responsibility therefore joins through the active lease, not the property.
+- **Deposit liability ≠ stated deposit.** 52 Shenango states $1,000, but the $500 move-in
+  fee deducts from it (Total Due $2,100, not $2,600). Held liability is **$500**; $500 is
+  non-refundable fee income. Model `deposit_stated`, `deposit_held`, and
+  `fees_offset_at_signing` separately.
+- **Move-in balance is a receivable.** 52 Shenango records Total Due $2,100 against Total
+  Paid **$0.00** at execution. Whether it was collected is unknown — a knowledge gap (P1),
+  not a zero.
+- **Renewal is a live obligation.** 52 Shenango runs 2024-12-01 to 2026-11-30 and
+  auto-rolls to month-to-month. Expiry is under four months out as of this writing.
+
+**Extraction hazard — checkboxes.** The lead paint disclosure extracts with *both* options
+present ("hazards are present" and "landlord has no knowledge"). Checkbox, initial, and
+strike-through fields must be flagged low-confidence and are never auto-promoted (ADR-0007).
+
+**Legal flag:** 52 Shenango is a 24-month term reaching two years on 2026-12-01. PA has
+escrow and interest requirements for deposits held beyond two years. For the operator's
+attorney; this document offers no legal advice.
+
+### Section 8 leases
+Validated against 34 Smith Ave (Gwendolyn Lee, term 2025-08-01 to 2026-07-31):
+
+- **The HAP/tenant split is not stated as such anywhere in the lease.** At 34 Smith it
+  leaked into the "Amount due at signing" block: Total Due $607.00, Total Paid $188.00,
+  summing to the $795.00 contract rent. Those fields mean gross-due and gross-paid on the
+  52 Shenango lease. **Same form, same fields, different semantics.** Extraction must never
+  assume field meaning; both readings are flagged for confirmation.
+- **HAP drifts between recertifications.** 34 Smith: $607 at signing (Jun 2025) → $519 on
+  the Mercer County statement (Jul 2026). Contract rent unchanged, so the tenant portion
+  rose $188 → $276. HAP amount is therefore a time-series with validity ranges, not a
+  lease attribute.
+- **Authoritative source for the split is the housing authority statement**, not the lease.
+
+### Lease knowledge states
+`no_lease_on_file` is not the only gap. Observed states requiring explicit representation:
+
+| State | Example |
+|---|---|
+| `unsigned` | 34 Smith — all signature blocks blank, filename marked "Unsigned" |
+| `expired_month_to_month` | 34 Smith — term ended 2026-07-31, auto-rolled |
+| `expiring_soon` | 52 Shenango — ends 2026-11-30 |
+| `terms_uncertain` | 34 Smith — $795 unconfirmed; S8 recert may have reset contract rent |
+
+A lease that is unsigned **and** expired cannot supply a trustworthy contract rent. The
+system reports the uncertainty and generates the ask; it does not silently use $795.
+
+### Reconciliation test fixtures
+Three real cases — one clean, one short, one uncertain — all derived from documents
+already in hand. These are the reconciliation engine's first tests.
+
+| Case | Contract rent | Collected | Verdict |
+|---|---|---|---|
+| 52 Shenango | $1,100 (signed lease) | $1,100 (fee $88.00 ÷ 8%) | **Paid in full** |
+| 1002 Webster 101 | $750 (settlement proration) | $400 (fee $32.00 ÷ 8%) | **$350 short** |
+| 34 Smith | $795 (unsigned, expired) | $576 = $519 HAP + $57 tenant | **~$219 short, rent unconfirmed** |
+
+The third case is the important one: it is only visible by joining a lease, a housing
+authority statement, and a management invoice. No single document reveals it, which is why
+the ledger exists.
+
 ### Lifecycle and temporality
 Properties and entities are not permanent, and a sold property is not a deleted one.
 

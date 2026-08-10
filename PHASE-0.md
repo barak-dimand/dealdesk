@@ -11,6 +11,13 @@ its own done condition. Do them in order — later tasks depend on earlier ones.
 > training data. Consult `node_modules/next/dist/docs/` before writing framework code.
 > Middleware is `src/proxy.ts`, **not** `middleware.ts`. Do not rename it.
 
+> **Two-strike rule on environment setup.** If a tool install, binary download, or
+> dependency resolution fails **twice**, stop. Report what failed and what you tried, and
+> move to the next task that is not blocked by it. Do not retry with variations, do not
+> try alternate package managers, do not attempt to build from source. Environment
+> problems are the operator's to solve outside the session — they are fast for a human
+> with a terminal and catastrophic for an agent with a context window.
+
 ---
 
 ## Task 0 — Non-code, do this first
@@ -27,16 +34,38 @@ It runs in parallel with everything below.
 
 ## Task 1 — Baseline migrations (ADR-0001)
 
-1. `supabase init` if not already present.
-2. Copy `src/lib/supabase/schema.sql` verbatim to
+**Prerequisite, done by the operator outside this session:** install the Supabase CLI via
+Homebrew (`brew install supabase/tap/supabase`), Scoop, or a Linux package. **Do not
+install it through npm.** The npm postinstall script routinely fails to place the binary,
+and global npm/pnpm installs are explicitly unsupported by the package itself.
+
+### 1a — Write the baseline (no tooling required)
+1. Copy `src/lib/supabase/schema.sql` verbatim to
    `supabase/migrations/0001_baseline.sql`. **Do not clean it up.** A baseline that does
    not match production is worse than an ugly one.
-3. Verify against the live database: apply to a fresh local instance and diff.
-4. Delete `src/lib/supabase/schema.sql` and note its retirement in `CLAUDE.md`.
-5. Add an `npm run db:migrate` script.
+2. Add the ADR-0004 comment block above the RLS section stating the policies are
+   intentionally inert.
 
-**Done when:** a fresh local database can be built from migrations alone and matches
-production schema.
+Do this first. It is not blocked on anything.
+
+### 1b — Verify and cut over (requires the CLI, **not** Docker)
+3. `supabase init` if `supabase/config.toml` is absent.
+4. `supabase link --project-ref <ref>` (ref is in the Supabase dashboard URL).
+5. `supabase db dump --linked -f /tmp/production_schema.sql` — pulls the live schema
+   without a local stack.
+6. Diff `/tmp/production_schema.sql` against `0001_baseline.sql`. Expect cosmetic
+   differences (ordering, quoting, `if not exists` clauses collapsed). What matters is
+   that **no table, column, constraint, policy, trigger, or function is missing.**
+   **Show the operator the diff before proceeding.**
+7. Delete `src/lib/supabase/schema.sql`; note its retirement in `CLAUDE.md`.
+8. Add an `npm run db:migrate` script wrapping `supabase db push`.
+
+**Done when:** the baseline is confirmed to contain every object present in production,
+and `schema.sql` is retired.
+
+> **Docker is not required for Phase 0.** `supabase start` runs the full local stack and
+> needs Docker Desktop; nothing in this phase needs it. Do not install Docker to satisfy
+> this task. If a command demands it, you are on the wrong command.
 
 ---
 
