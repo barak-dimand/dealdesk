@@ -45,8 +45,32 @@ decision to abandon the hand-maintained file:
 1. `deals.status` default declared `'evaluating'`; actually `'analyzing'` live.
 2. A `deal_loi_updated_at` trigger was declared but never applied.
 
-**Outstanding:** rebuild-from-empty verification, and remote history reconciliation. Both
-are cheapest now — the instance holds only test data and the app has never been deployed.
+**Outstanding at the time of this amendment:** rebuild-from-empty verification, and remote
+history reconciliation. Both are cheapest now — the instance holds only test data and the
+app has never been deployed. **Resolved same-day — see the second amendment below.**
+
+## Amendment 2 — 2026-08-10 (later same day)
+**Both outstanding items above are resolved. The baseline is proven.**
+
+`supabase db reset --linked` (this CLI version supports resetting the *linked remote
+project itself* from local migration files — no local Docker stack involved) applied
+`0001`→`0002`→`0003` to the live project from empty, then ran the new `supabase/seed.sql`.
+Verified against the pre-reset introspection captured for the first amendment: schema,
+triggers (still exactly 2 — no `deal_loi_updated_at`), and RLS policies (18, one per
+table) all match. `supabase migration list --linked` now shows local and remote in full
+agreement — the six-entry (then eight, after `apply_migration`'s two additions) mismatch
+is gone, resolved as a side effect of the reset rather than by reconstructing the six
+unknown historical migration files.
+
+Cost of this proof: the reset also deleted the 8 real deals and everything nested under
+them (documents, data fields, units, messages, notes, offer structures, recommendations,
+LOIs) that had accumulated in the same project outside this session's work. Backed up as
+JSON before the reset (session-local only, not in the repo — contains real parsed
+financials) and confirmed lost with Barak before proceeding; not restored. The 9 files in
+the `deal-documents` storage bucket survived (the reset only touches the `public` schema)
+and are now orphaned.
+
+Exit criterion 1 ("a new table can be added, applied, and rolled back by tooling") is met.
 
 ## Consequences
 - Development databases become resettable and reproducible.

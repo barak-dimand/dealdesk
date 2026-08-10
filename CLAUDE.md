@@ -39,11 +39,19 @@ Next.js 16 App Router · React 19 · Supabase (Postgres + RLS) · Clerk auth · 
   places where schema.sql had drifted from what was actually live: `deals.status`'s
   default was `'evaluating'` in schema.sql vs. actually `'analyzing'`; a
   `deal_loi_updated_at` trigger was declared in schema.sql but never applied. See
-  `docs/journal/2026-08-10.md` for the full comparison. Note also: the live database's
-  own migration history table already had 6 real CLI-applied migrations predating this
-  session, whose source files aren't in this repo — `0001_baseline.sql` was not
-  reconciled against that history table (no `migration repair` calls); it only
-  guarantees an empty database ends up matching the live schema.
+  `docs/journal/2026-08-10.md` for the full comparison. **Verified by an actual
+  rebuild:** `supabase db reset --linked` (resets the linked remote project itself from
+  local migration files — no Docker) applied `0001`→`0002`→`0003` to the live project
+  from empty and matched the pre-reset schema/triggers/policies exactly. The live
+  database's migration history table had had 6 real CLI-applied migrations predating
+  this session with no source files in this repo; the reset overwrote that history with
+  exactly the 3 local migrations, so `supabase migration list --linked` now shows local
+  and remote in agreement — no reconciliation step was needed once the baseline was
+  proven correct. `supabase/seed.sql` recreates the workspace + four entities after any
+  future reset. Cost: the reset deleted 8 real accumulated test deals (backed up outside
+  the repo, not restored) and orphaned 9 files in the `deal-documents` storage bucket
+  (reset only touches the `public` schema) — both disclosed and confirmed with Barak
+  before running.
 - **Authorization**: every route resolves workspace scope through
   `withWorkspace()` (`src/lib/auth/withWorkspace.ts`), not by hand-rolling
   `getWorkspaceId()`. RLS policies exist but are **intentionally inert** — the
