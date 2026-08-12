@@ -52,6 +52,24 @@ Next.js 16 App Router · React 19 · Supabase (Postgres + RLS) · Clerk auth · 
   the repo, not restored) and orphaned 9 files in the `deal-documents` storage bucket
   (reset only touches the `public` schema) — both disclosed and confirmed with Barak
   before running.
+- **Applying a new migration to the live project: `supabase db push --linked` (also
+  `npm run db:migrate`) is the standard path** — it applies pending local migration
+  files directly, keyed by their filename version (`0004`, `0005`, ...), no Docker
+  required. **Do not use the `mcp__supabase__apply_migration` tool for routine
+  migrations** — it works (no Docker either), but it records its own
+  auto-generated timestamp as the version in the remote history table instead of the
+  local filename, which immediately desyncs `supabase migration list --linked` and
+  makes a future `db push` refuse to run (`LegacyDbPushMissingLocalError`). This
+  happened twice (Phase 0 Task 5, PHASE-1 Task 1) before being settled 2026-08-12 —
+  see ADR-0001's third amendment. If `apply_migration` is ever used anyway (e.g. `db
+  push` itself is unavailable for some reason), immediately reconcile before the
+  session ends:
+  `supabase migration repair --status reverted <stray-remote-timestamp...> --linked`
+  for the auto-generated entries, then
+  `supabase migration repair --status applied <local-version...> --linked` for the
+  local files that actually ran — do **not** re-run the SQL, `repair` only edits the
+  bookkeeping. Confirm with `supabase db push --linked --dry-run` (should report
+  `"upToDate": true` with no pending migrations).
 - **Authorization**: every route resolves workspace scope through
   `withWorkspace()` (`src/lib/auth/withWorkspace.ts`), not by hand-rolling
   `getWorkspaceId()`. RLS policies exist but are **intentionally inert** — the

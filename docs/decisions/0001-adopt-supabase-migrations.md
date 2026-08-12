@@ -72,6 +72,38 @@ and are now orphaned.
 
 Exit criterion 1 ("a new table can be added, applied, and rolled back by tooling") is met.
 
+## Amendment 3 — 2026-08-12
+**Settles the standard command for applying new migrations. `apply_migration` is the
+exception, not the path.**
+
+The mismatch this ADR keeps describing recurred: PHASE-1 Task 1 used
+`mcp__supabase__apply_migration` to apply `0004`/`0005` (reasonable at the time — no
+Docker, and it worked), but that tool records its own auto-generated timestamp as the
+version in the remote history table instead of the local filename. `supabase migration
+list --linked` immediately showed the same shape of mismatch as Amendment 1: two
+timestamped remote-only entries, two filename-only local entries.
+
+This stops being cheap to clear with a reset once Task 2 (properties, real portfolio
+backfill) lands, so it was settled now instead of deferred again:
+
+1. **`supabase db push --linked` applies local migration files directly, keyed by their
+   filename version, no Docker required.** This is now the documented standard path (also
+   `npm run db:migrate`, corrected from a bare `supabase migration up` that defaulted to a
+   local Docker target this environment doesn't have and had never actually been run).
+2. **`supabase migration repair` aligns the bookkeeping without touching data or schema —
+   confirmed empirically, not assumed.** `db push --linked --dry-run` refused with
+   `LegacyDbPushMissingLocalError` while the mismatch existed; its own error message
+   supplied the exact repair command. Ran
+   `migration repair --status reverted 20260812104347 20260812104402 --linked` (the two
+   stray `apply_migration` timestamps — this does not re-run or undo their SQL, only edits
+   the history table) followed by `migration repair --status applied 0004 0005 --linked`
+   (the two local files whose SQL had already run). `db push --linked --dry-run` then
+   reported `"upToDate": true`.
+
+`apply_migration` is not banned — it's a legitimate escape hatch if `db push` is ever
+unavailable — but any session that uses it must immediately run the same repair sequence
+before ending, documented now in root `CLAUDE.md` so this isn't rediscovered a third time.
+
 ## Consequences
 - Development databases become resettable and reproducible.
 - Rollback becomes possible.
