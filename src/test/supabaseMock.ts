@@ -10,6 +10,18 @@ type QueryResult = { data: Row[] | null; error: { message: string } | null };
 
 export function createFakeSupabase(data: Record<string, Row[]>) {
   return {
+    // Minimal fake for supabase.storage.from(bucket).upload(path, buffer, opts)
+    // — records nothing, just reports success. Extend if a test needs to
+    // assert on what was "uploaded" or simulate a storage failure.
+    storage: {
+      from() {
+        return {
+          upload(path: string) {
+            return Promise.resolve({ data: { path }, error: null });
+          },
+        };
+      },
+    },
     from(table: string) {
       const filters: Array<[string, unknown]> = [];
       const sorts: Array<[string, boolean]> = [];
@@ -47,19 +59,32 @@ export function createFakeSupabase(data: Record<string, Row[]>) {
           }
           return Promise.resolve({ data: rows[0], error: null });
         },
+        // Unlike .single(), zero rows is not an error — matches supabase-js.
+        maybeSingle() {
+          const rows = rowsInScope();
+          return Promise.resolve({ data: rows[0] ?? null, error: null });
+        },
         insert(obj: Row) {
-          // Mirrors Postgres defaults (uuid primary key, created_at timestamptz
-          // default now()) so schema validation on the response behaves like it
-          // would against the real database. Deliberately NOT `.toISOString()`
-          // (which ends in "Z") — PostgREST returns a numeric offset
-          // ("+00:00") with microsecond precision. A mock that used the JS
-          // format masked a real bug (PHASE-0 Task 5, 2026-08-10): the
+          // Mirrors Postgres defaults (uuid primary key, created_at/updated_at
+          // timestamptz default now()) so schema validation on the response
+          // behaves like it would against the real database. Deliberately NOT
+          // `.toISOString()` (which ends in "Z") — PostgREST returns a numeric
+          // offset ("+00:00") with microsecond precision. A mock that used the
+          // JS format masked a real bug (PHASE-0 Task 5, 2026-08-10): the
           // entities route 400'd on every insert against the live DB despite
           // the row being written, because `z.iso.datetime()` only accepted
           // "Z". Use `pgTimestamptz` (src/lib/schema/timestamp.ts) to validate.
+          // A second bug of the same shape (PHASE-1 Task 1, 2026-08-12):
+          // `updated_at` wasn't defaulted here at all, so any table with both
+          // columns (e.g. counterparties) failed response validation even
+          // though real Postgres populates both. Extra keys on tables that
+          // don't have `updated_at` are harmless — Zod schemas here aren't
+          // `.strict()`.
+          const now = new Date().toISOString().replace("Z", "000+00:00");
           const inserted = {
             id: crypto.randomUUID(),
-            created_at: new Date().toISOString().replace("Z", "000+00:00"),
+            created_at: now,
+            updated_at: now,
             ...obj,
           };
           data[table] = [...(data[table] ?? []), inserted];
